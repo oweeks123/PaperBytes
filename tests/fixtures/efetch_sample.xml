@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PubmedArticleSet>
+  <!-- A: structured abstract, inline markup, DOI in ArticleIdList, full date -->
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>1001</PMID>
+      <Article>
+        <Journal>
+          <Title>The New England Journal of Medicine</Title>
+          <ISOAbbreviation>N Engl J Med</ISOAbbreviation>
+          <JournalIssue>
+            <PubDate><Year>2026</Year><Month>Aug</Month><Day>05</Day></PubDate>
+          </JournalIssue>
+        </Journal>
+        <ArticleTitle>Effect of <i>drug X</i> on outcomes<sup>2</sup></ArticleTitle>
+        <Abstract>
+          <AbstractText Label="BACKGROUND">We studied <i>X</i> in adults.</AbstractText>
+          <AbstractText Label="METHODS">A randomized trial.</AbstractText>
+          <AbstractText Label="RESULTS">Effect seen (p<sub>1</sub>&lt;0.05).</AbstractText>
+          <AbstractText Label="CONCLUSIONS">X helps.</AbstractText>
+        </Abstract>
+        <AuthorList>
+          <Author>
+            <LastName>Smith</LastName><ForeName>Jane</ForeName>
+            <AffiliationInfo><Affiliation>Oxford</Affiliation></AffiliationInfo>
+          </Author>
+          <Author><CollectiveName>The TRIAL Group</CollectiveName></Author>
+        </AuthorList>
+        <Language>eng</Language>
+        <PublicationTypeList>
+          <PublicationType>Randomized Controlled Trial</PublicationType>
+        </PublicationTypeList>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading><DescriptorName MajorTopicYN="Y">Heart Failure</DescriptorName></MeshHeading>
+        <MeshHeading><DescriptorName MajorTopicYN="N">Humans</DescriptorName></MeshHeading>
+      </MeshHeadingList>
+      <KeywordList><Keyword>cardiology</Keyword></KeywordList>
+    </MedlineCitation>
+    <PubmedData>
+      <History>
+        <PubMedPubDate PubStatus="entrez"><Year>2026</Year><Month>8</Month><Day>10</Day></PubMedPubDate>
+      </History>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">1001</ArticleId>
+        <ArticleId IdType="doi">10.1000/preferred</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+
+  <!-- B: no abstract -->
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>1002</PMID>
+      <Article>
+        <Journal><Title>BMJ</Title></Journal>
+        <ArticleTitle>A record with no abstract</ArticleTitle>
+      </Article>
+    </MedlineCitation>
+  </PubmedArticle>
+
+  <!-- C: partial date (year only, via MedlineDate) -->
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>1003</PMID>
+      <Article>
+        <Journal>
+          <Title>Lancet</Title>
+          <JournalIssue><PubDate><MedlineDate>2026</MedlineDate></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>Year-only publication date</ArticleTitle>
+        <Abstract><AbstractText>Plain single-block abstract.</AbstractText></Abstract>
+      </Article>
+    </MedlineCitation>
+  </PubmedArticle>
+
+  <!-- D: DOI only in ELocationID -->
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>1004</PMID>
+      <Article>
+        <Journal><Title>Annals of Internal Medicine</Title></Journal>
+        <ArticleTitle>DOI only in ELocationID</ArticleTitle>
+        <Abstract><AbstractText>Some findings.</AbstractText></Abstract>
+        <ELocationID EIdType="pii">S0000</ELocationID>
+        <ELocationID EIdType="doi">10.1000/eloc-only</ELocationID>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList><ArticleId IdType="pubmed">1004</ArticleId></ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+
+  <!-- E: inline markup in a single unlabelled abstract -->
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>1005</PMID>
+      <Article>
+        <Journal><Title>Nature Medicine</Title></Journal>
+        <ArticleTitle>Markup heavy</ArticleTitle>
+        <Abstract>
+          <AbstractText>The rate was 3<sup>rd</sup> highest at <i>baseline</i> and fell 10<sub>2</sub>.</AbstractText>
+        </Abstract>
+      </Article>
+    </MedlineCitation>
+  </PubmedArticle>
+</PubmedArticleSet>

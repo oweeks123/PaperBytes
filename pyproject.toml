@@ -1,0 +1,29 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# Strict typing is scoped to the new retrieval package; the legacy main.py is not
+# retyped in this layer (see PROMPT_layer1_retrieval.md).
+files = ["paperbytes"]
+
+[[tool.mypy.overrides]]
+# lxml ships no type information; treat it as untyped rather than failing.
+module = ["lxml", "lxml.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# The curated journal list contains real journal titles longer than the line
+# limit; wrapping them would corrupt the data.
+"paperbytes/pubmed/filters.py" = ["E501"]
+# Test data (mock JSON payloads, long assertions) is clearer unwrapped.
+"tests/**" = ["E501"]

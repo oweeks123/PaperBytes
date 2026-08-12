@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import date
 from typing import Optional
 
 # Load a local .env file if present (development convenience; optional dependency).
@@ -13,10 +14,10 @@ except ImportError:
     pass
 
 import anthropic
+import structlog
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from pymed import PubMed
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -36,37 +37,37 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("paperbytes")
+from paperbytes.config import Settings, get_settings
+from paperbytes.pubmed import filters
+from paperbytes.pubmed.client import PubMedClient, PubMedError
+from paperbytes.pubmed.models import (
+    DateField,
+    JournalScope,
+    PubMedArticle,
+    SearchFilters,
+    SearchResponse,
+    to_storage_fields,
+)
 
-JOURNALS = [
-    "Annals of emergency medicine",
-    "Internal and emergency medicine",
-    "Emergency medicine journal : EMJ",
-    "The Journal of Emergency Medicine",
-    "Annals of family medicine",
-    "The British journal of general practice : the journal of the Royal College of General Practitioners",
-    "Journal of the American Board of Family Medicine : JABFM",
-    "American family physician",
-    "Lancet (London, England)",
-    "The New England journal of medicine",
-    "Journal of the American Medical Association",
-    "Nature medicine",
-    "British medical journal",
-    "Annals of internal medicine",
-    "Annals of surgery",
-    "European urology",
-    "JAMA surgery",
-    "The Journal of urology",
-    "British Journal of surgery",
-    "Surgery",
-    "Laryngoscope",
-    "Otolaryngology--head and neck surgery : official journal of American Academy of Otolaryngology-Head and Neck Surgery",
-    "The Journal of laryngology and otology",
-    "The lancet. Diabetes endocrinology",
-    "Nature reviews. Endocrinology",
-    "British journal of sports medicine",
-]
+settings = get_settings()
+
+# Structured logging (JSON), honouring LOG_LEVEL. structlog routes through stdlib
+# logging so uvicorn's handlers still apply.
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(message)s",
+)
+structlog.configure(
+    processors=[
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(
+        getattr(logging, settings.log_level.upper(), logging.INFO)
+    ),
+)
+log = structlog.get_logger("paperbytes")
 
 SUMMARY_TASK = (
     "Summarise the aim of the following journal article abstract by extracting the "
@@ -74,42 +75,24 @@ SUMMARY_TASK = (
     "specialties the article is relevant to (e.g. 'Cardiology', 'Emergency Medicine')."
 )
 
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
-PUBMED_EMAIL = os.environ.get("PUBMED_EMAIL")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "7"))
-
-# Local development defaults to a SQLite file (zero setup). Point DATABASE_URL at
-# Postgres for containerised/production deployment. Heroku-style postgres:// URLs
-# are normalised to the postgresql:// scheme SQLAlchemy expects.
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./paperbytes.db")
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-# Clients are created lazily so the app can boot (and serve read-only endpoints)
-# without PubMed/Anthropic credentials configured.
-_pubmed: Optional[PubMed] = None
+# Anthropic client is created lazily so the app can boot (and serve read-only
+# endpoints) without summarisation credentials configured.
 _claude: Optional[anthropic.Anthropic] = None
-
-
-def get_pubmed() -> PubMed:
-    global _pubmed
-    if _pubmed is None:
-        if not PUBMED_EMAIL:
-            raise RuntimeError("PUBMED_EMAIL is not set")
-        _pubmed = PubMed(tool="PaperBytes", email=PUBMED_EMAIL)
-    return _pubmed
 
 
 def get_claude() -> anthropic.Anthropic:
     global _claude
     if _claude is None:
-        if not ANTHROPIC_API_KEY:
+        if not settings.anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not set")
-        _claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        _claude = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     return _claude
 
 
+# Local development defaults to a SQLite file (zero setup). Point DATABASE_URL at
+# Postgres for containerised/production deployment; Heroku-style postgres:// URLs
+# are normalised to the postgresql:// scheme SQLAlchemy expects.
+DATABASE_URL = settings.normalised_database_url
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
@@ -178,9 +161,21 @@ def get_db():
         db.close()
 
 
+def get_pubmed_client(cfg: Settings = Depends(get_settings)) -> PubMedClient:
+    """FastAPI dependency yielding a PubMedClient bound to request settings.
+
+    Tests override this (or ``get_settings``) to inject a mocked transport.
+    """
+    return PubMedClient(cfg)
+
+
 def summarise(abstract: str) -> ArticleSummary:
+    """Summarise an abstract with Claude. Synchronous (the anthropic SDK call is
+    blocking); callers on the async path wrap this in ``run_in_threadpool``. This
+    is the summarisation layer and is intentionally left unchanged by the
+    retrieval work."""
     response = get_claude().messages.parse(
-        model=CLAUDE_MODEL,
+        model=settings.claude_model,
         max_tokens=1024,
         system=SUMMARY_TASK,
         messages=[{"role": "user", "content": f"Abstract:\n{abstract}"}],
@@ -191,84 +186,92 @@ def summarise(abstract: str) -> ArticleSummary:
     return response.parsed_output
 
 
-def fetch_journal(journal: str, since: str, until: str, db: Session) -> int:
-    query = (
-        f'(({journal}[Journal]) AND '
-        f'(("{since}"[Date - Publication] : "{until}"[Date - Publication]))) '
-        f'AND (fha[Filter])'
-    )
+async def run_fetch(spec: SearchFilters) -> dict:
+    """Stream hard-filtered articles from PubMed, summarise each with Claude, and
+    persist. Retrieval is async (httpx); the sync ``summarise`` call is off-loaded
+    to a threadpool at the boundary so the event loop is never blocked. Records
+    already stored (by PMID) or lacking an abstract are skipped."""
+    client = PubMedClient(settings)
+    seen = 0
     saved = 0
-    for result in get_pubmed().query(query, max_results=100):
-        # pymed returns pubmed_id as a newline-separated string (the article's
-        # PMID followed by any reference PMIDs). Take the first line; slicing by
-        # character count truncates 9-digit PMIDs into the wrong id.
-        raw_id = result.pubmed_id or ""
-        pubmed_id = raw_id.splitlines()[0].strip() if raw_id.strip() else ""
-        if not pubmed_id:
-            continue
-        if db.get(Article, pubmed_id) is not None:
-            continue
-        if not result.abstract:
-            continue
-
-        try:
-            summary = summarise(result.abstract)
-        except Exception as e:
-            log.warning("Claude summarisation failed for %s: %s", pubmed_id, e)
-            continue
-
-        article = Article(
-            pubmed_id=pubmed_id,
-            title=result.title or "",
-            abstract=result.abstract,
-            ai_summary=summary.summary,
-            publication_date=str(result.publication_date),
-            journal=result.journal or journal,
-            pubmed_url=f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/",
-            sent=False,
-            fetched_at=dt.datetime.now(dt.timezone.utc),
-            specialties=[Specialty(name=s) for s in dict.fromkeys(summary.specialties)],
-        )
-        db.add(article)
-        db.commit()
-        saved += 1
-    return saved
-
-
-def fetch_all_journals(lookback_days: int) -> dict[str, int]:
-    today = dt.datetime.today()
-    since = (today - dt.timedelta(days=lookback_days)).strftime("%Y/%m/%d")
-    until = today.strftime("%Y/%m/%d")
-    results: dict[str, int] = {}
-    db = SessionLocal()
     try:
-        for journal in JOURNALS:
-            try:
-                results[journal] = fetch_journal(journal, since, until, db)
-                log.info("Fetched %d new articles from %s", results[journal], journal)
-            except Exception as e:
-                db.rollback()
-                log.exception("Failed fetching %s: %s", journal, e)
-                results[journal] = -1
+        async for art in client.search_and_fetch(spec):
+            seen += 1
+            with SessionLocal() as db:
+                if db.get(Article, art.pmid) is not None:
+                    continue
+                if not art.abstract:
+                    continue
+                try:
+                    summary = await run_in_threadpool(summarise, art.abstract)
+                except Exception as e:  # noqa: BLE001 — skip a single bad summary
+                    log.warning("summarise_failed", pmid=art.pmid, error=str(e))
+                    continue
+
+                article = Article(
+                    **to_storage_fields(art),
+                    ai_summary=summary.summary,
+                    sent=False,
+                    fetched_at=dt.datetime.now(dt.timezone.utc),
+                    specialties=[Specialty(name=s) for s in dict.fromkeys(summary.specialties)],
+                )
+                db.add(article)
+                db.commit()
+                saved += 1
+        log.info("fetch_complete", seen=seen, saved=saved)
     finally:
-        db.close()
-    return results
+        await client.aclose()
+    return {"seen": seen, "saved": saved}
 
 
-def _require_fetch_credentials():
+def _require_pubmed_email() -> None:
+    if not settings.pubmed_email:
+        raise HTTPException(status_code=400, detail="Missing required config: PUBMED_EMAIL")
+
+
+def _require_fetch_credentials() -> None:
     missing = [
         name
-        for name, value in (("PUBMED_EMAIL", PUBMED_EMAIL), ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY))
+        for name, value in (
+            ("PUBMED_EMAIL", settings.pubmed_email),
+            ("ANTHROPIC_API_KEY", settings.anthropic_api_key),
+        )
         if not value
     ]
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing required config: {', '.join(missing)}")
 
 
+def _build_filters(
+    days_back: Optional[int],
+    date_from: Optional[date],
+    date_to: Optional[date],
+    date_field: DateField,
+    journal_scope: JournalScope,
+    restrict_humans: bool,
+    restrict_english: bool,
+) -> SearchFilters:
+    return SearchFilters(
+        days_back=days_back,
+        date_from=date_from,
+        date_to=date_to,
+        date_field=date_field,
+        journal_scope=journal_scope,
+        restrict_humans=restrict_humans,
+        restrict_english=restrict_english,
+    )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
-    log.info("PaperBytes starting with model=%s lookback=%d days db=%s", CLAUDE_MODEL, LOOKBACK_DAYS, engine.url.get_backend_name())
+    log.info(
+        "startup",
+        model=settings.claude_model,
+        lookback_days=settings.lookback_days,
+        db=engine.url.get_backend_name(),
+        ncbi_rate_limit=settings.ncbi_rate_limit,
+    )
     yield
 
 
@@ -277,24 +280,124 @@ app = FastAPI(title="PaperBytes", lifespan=lifespan)
 
 @app.get("/")
 def health():
-    return {"status": "ok", "model": CLAUDE_MODEL, "journals": len(JOURNALS)}
+    return {
+        "status": "ok",
+        "model": settings.claude_model,
+        "journals": len(filters.CURATED_JOURNALS),
+        "ncbi_api_key_configured": bool(settings.ncbi_api_key),
+        "ncbi_rate_limit": settings.ncbi_rate_limit,
+    }
+
+
+@app.get("/search", response_model=SearchResponse)
+async def search_preview(
+    days_back: int = Query(settings.lookback_days, ge=0, description="Search the previous N days. Defaults to LOOKBACK_DAYS (7)."),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    date_field: DateField = Query(DateField.MHDA, description="Date field for the window. MHDA (MeSH date) keeps results MeSH-complete; use EDAT for a bleeding-edge window with the MeSH filters off."),
+    journal_scope: JournalScope = JournalScope.CURATED,
+    restrict_humans: bool = True,
+    restrict_english: bool = True,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    client: PubMedClient = Depends(get_pubmed_client),
+):
+    """Live preview of PubMed retrieval: runs the hard-filtered query and returns
+    parsed articles. Does not summarise or store. The resolved term is always
+    returned so you can see exactly what was sent to NCBI."""
+    _require_pubmed_email()
+    spec = _build_filters(
+        days_back, date_from, date_to, date_field, journal_scope, restrict_humans, restrict_english
+    )
+    try:
+        term, result = await client.search(spec)
+        if result.count == 0 or offset >= result.count:
+            articles = []
+        else:
+            articles = await client.fetch_page(result, offset=offset, size=limit)
+    except PubMedError as e:
+        raise HTTPException(status_code=502, detail=f"PubMed retrieval failed: {e}")
+    finally:
+        await client.aclose()
+    return SearchResponse(
+        resolved_term=term,
+        total_count=result.count,
+        returned=len(articles),
+        limit=limit,
+        offset=offset,
+        articles=articles,
+    )
+
+
+@app.post("/search", response_model=SearchResponse)
+async def search_preview_post(
+    spec: SearchFilters,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    client: PubMedClient = Depends(get_pubmed_client),
+):
+    """Same as ``GET /search`` but takes a full ``SearchFilters`` body, for
+    queries too complex for query params (custom pub-type lists, MeSH terms,
+    freeform ``extra_terms``)."""
+    _require_pubmed_email()
+    try:
+        term, result = await client.search(spec)
+        if result.count == 0 or offset >= result.count:
+            articles = []
+        else:
+            articles = await client.fetch_page(result, offset=offset, size=limit)
+    except PubMedError as e:
+        raise HTTPException(status_code=502, detail=f"PubMed retrieval failed: {e}")
+    finally:
+        await client.aclose()
+    return SearchResponse(
+        resolved_term=term,
+        total_count=result.count,
+        returned=len(articles),
+        limit=limit,
+        offset=offset,
+        articles=articles,
+    )
 
 
 @app.post("/fetch")
 async def trigger_fetch(background_tasks: BackgroundTasks, lookback_days: Optional[int] = None):
+    """Kick off a background fetch+summarise+store pass. Returns immediately with
+    the resolved search term so you can confirm what will be queried."""
     _require_fetch_credentials()
-    days = lookback_days if lookback_days is not None else LOOKBACK_DAYS
-    background_tasks.add_task(run_in_threadpool, fetch_all_journals, days)
-    return {"status": "started", "lookback_days": days}
+    spec = SearchFilters(days_back=lookback_days)
+    from paperbytes.pubmed.query import build_search_term
+
+    term = build_search_term(spec, default_lookback_days=settings.lookback_days)
+    background_tasks.add_task(run_fetch, spec)
+    return {
+        "status": "started",
+        "lookback_days": lookback_days if lookback_days is not None else settings.lookback_days,
+        "resolved_term": term,
+    }
 
 
 @app.post("/fetch/sync")
 async def fetch_sync(lookback_days: Optional[int] = None):
+    """Fetch+summarise+store synchronously and return counts. Slow; useful for
+    cron.
+
+    Response-shape note: the old per-journal ``by_journal`` map is gone — the new
+    retrieval is a single hard-filtered query rather than one request per journal
+    — replaced by ``seen``/``saved`` and the resolved term. No frontend consumes
+    this yet, so the change is safe to make now."""
     _require_fetch_credentials()
-    days = lookback_days if lookback_days is not None else LOOKBACK_DAYS
-    counts = await run_in_threadpool(fetch_all_journals, days)
-    total = sum(c for c in counts.values() if c >= 0)
-    return {"status": "complete", "total_saved": total, "by_journal": counts}
+    spec = SearchFilters(days_back=lookback_days)
+    from paperbytes.pubmed.query import build_search_term
+
+    term = build_search_term(spec, default_lookback_days=settings.lookback_days)
+    result = await run_fetch(spec)
+    return {
+        "status": "complete",
+        "total_saved": result["saved"],
+        "seen": result["seen"],
+        "resolved_term": term,
+    }
 
 
 @app.get("/articles")
@@ -371,6 +474,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", "8000")),
-        reload=os.environ.get("RELOAD") == "1",
+        port=settings.port,
+        reload=settings.reload,
     )
