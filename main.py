@@ -4,22 +4,37 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
+# Load a local .env file if present (development convenience; optional dependency).
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 import anthropic
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from pymed import PubMed
 from sqlalchemy import (
-    ARRAY,
     Boolean,
     DateTime,
+    ForeignKey,
     String,
     Text,
     create_engine,
     func,
     select,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    Session,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("paperbytes")
@@ -60,30 +75,60 @@ SUMMARY_TASK = (
 )
 
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
-PUBMED_EMAIL = os.environ["PUBMED_EMAIL"]
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+PUBMED_EMAIL = os.environ.get("PUBMED_EMAIL")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "7"))
 
-# Heroku provisions DATABASE_URL with the legacy "postgres://" scheme, which
-# SQLAlchemy no longer accepts — normalise it to "postgresql://".
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/paperbytes")
+# Local development defaults to a SQLite file (zero setup). Point DATABASE_URL at
+# Postgres for containerised/production deployment. Heroku-style postgres:// URLs
+# are normalised to the postgresql:// scheme SQLAlchemy expects.
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./paperbytes.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Separator used to join the specialties array for substring filtering. Chosen
-# so it can never appear inside a specialty name or a user's query, which keeps
-# a match from spanning two adjacent array elements.
-_SPECIALTY_SEP = "\x1f"
+# Clients are created lazily so the app can boot (and serve read-only endpoints)
+# without PubMed/Anthropic credentials configured.
+_pubmed: Optional[PubMed] = None
+_claude: Optional[anthropic.Anthropic] = None
 
-pubmed = PubMed(tool="PaperBytes", email=PUBMED_EMAIL)
-claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+def get_pubmed() -> PubMed:
+    global _pubmed
+    if _pubmed is None:
+        if not PUBMED_EMAIL:
+            raise RuntimeError("PUBMED_EMAIL is not set")
+        _pubmed = PubMed(tool="PaperBytes", email=PUBMED_EMAIL)
+    return _pubmed
+
+
+def get_claude() -> anthropic.Anthropic:
+    global _claude
+    if _claude is None:
+        if not ANTHROPIC_API_KEY:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        _claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return _claude
+
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Specialty(Base):
+    __tablename__ = "article_specialties"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pubmed_id: Mapped[str] = mapped_column(
+        ForeignKey("articles.pubmed_id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String, index=True)
+
+    article: Mapped["Article"] = relationship(back_populates="specialties")
 
 
 class Article(Base):
@@ -93,12 +138,17 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String, nullable=False, default="")
     abstract: Mapped[str] = mapped_column(Text, nullable=False)
     ai_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    ai_specialties: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
     publication_date: Mapped[str] = mapped_column(String, nullable=False, default="")
     journal: Mapped[str] = mapped_column(String, nullable=False, default="")
     pubmed_url: Mapped[str] = mapped_column(String, nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    specialties: Mapped[list["Specialty"]] = relationship(
+        back_populates="article",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     def to_dict(self) -> dict:
         return {
@@ -106,7 +156,7 @@ class Article(Base):
             "title": self.title,
             "abstract": self.abstract,
             "ai_summary": self.ai_summary,
-            "ai_specialties": list(self.ai_specialties or []),
+            "ai_specialties": [s.name for s in self.specialties],
             "publication_date": self.publication_date,
             "journal": self.journal,
             "pubmed_url": self.pubmed_url,
@@ -129,7 +179,7 @@ def get_db():
 
 
 def summarise(abstract: str) -> ArticleSummary:
-    response = claude.messages.parse(
+    response = get_claude().messages.parse(
         model=CLAUDE_MODEL,
         max_tokens=1024,
         system=SUMMARY_TASK,
@@ -148,7 +198,7 @@ def fetch_journal(journal: str, since: str, until: str, db: Session) -> int:
         f'AND (fha[Filter])'
     )
     saved = 0
-    for result in pubmed.query(query, max_results=100):
+    for result in get_pubmed().query(query, max_results=100):
         # pymed returns pubmed_id as a newline-separated string (the article's
         # PMID followed by any reference PMIDs). Take the first line; slicing by
         # character count truncates 9-digit PMIDs into the wrong id.
@@ -172,12 +222,12 @@ def fetch_journal(journal: str, since: str, until: str, db: Session) -> int:
             title=result.title or "",
             abstract=result.abstract,
             ai_summary=summary.summary,
-            ai_specialties=summary.specialties,
             publication_date=str(result.publication_date),
             journal=result.journal or journal,
             pubmed_url=f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/",
             sent=False,
             fetched_at=dt.datetime.now(dt.timezone.utc),
+            specialties=[Specialty(name=s) for s in dict.fromkeys(summary.specialties)],
         )
         db.add(article)
         db.commit()
@@ -205,10 +255,20 @@ def fetch_all_journals(lookback_days: int) -> dict[str, int]:
     return results
 
 
+def _require_fetch_credentials():
+    missing = [
+        name
+        for name, value in (("PUBMED_EMAIL", PUBMED_EMAIL), ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY))
+        if not value
+    ]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required config: {', '.join(missing)}")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
-    log.info("PaperBytes starting with model=%s lookback=%d days", CLAUDE_MODEL, LOOKBACK_DAYS)
+    log.info("PaperBytes starting with model=%s lookback=%d days db=%s", CLAUDE_MODEL, LOOKBACK_DAYS, engine.url.get_backend_name())
     yield
 
 
@@ -222,6 +282,7 @@ def health():
 
 @app.post("/fetch")
 async def trigger_fetch(background_tasks: BackgroundTasks, lookback_days: Optional[int] = None):
+    _require_fetch_credentials()
     days = lookback_days if lookback_days is not None else LOOKBACK_DAYS
     background_tasks.add_task(run_in_threadpool, fetch_all_journals, days)
     return {"status": "started", "lookback_days": days}
@@ -229,6 +290,7 @@ async def trigger_fetch(background_tasks: BackgroundTasks, lookback_days: Option
 
 @app.post("/fetch/sync")
 async def fetch_sync(lookback_days: Optional[int] = None):
+    _require_fetch_credentials()
     days = lookback_days if lookback_days is not None else LOOKBACK_DAYS
     counts = await run_in_threadpool(fetch_all_journals, days)
     total = sum(c for c in counts.values() if c >= 0)
@@ -250,8 +312,8 @@ def list_articles(
     if journal:
         stmt = stmt.where(Article.journal.ilike(f"%{journal}%"))
     if specialty:
-        joined = func.array_to_string(Article.ai_specialties, _SPECIALTY_SEP)
-        stmt = stmt.where(joined.ilike(f"%{specialty}%"))
+        matching = select(Specialty.pubmed_id).where(Specialty.name.ilike(f"%{specialty}%"))
+        stmt = stmt.where(Article.pubmed_id.in_(matching))
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = db.scalars(
@@ -295,16 +357,20 @@ def delete_article(pubmed_id: str, db: Session = Depends(get_db)):
 
 @app.get("/specialties")
 def list_specialties(db: Session = Depends(get_db)):
-    specialty = func.unnest(Article.ai_specialties).label("specialty")
     stmt = (
-        select(specialty, func.count().label("n"))
-        .group_by(specialty)
+        select(Specialty.name, func.count().label("n"))
+        .group_by(Specialty.name)
         .order_by(func.count().desc())
     )
-    return {row.specialty: row.n for row in db.execute(stmt).all()}
+    return {name: n for name, n in db.execute(stmt).all()}
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        reload=os.environ.get("RELOAD") == "1",
+    )

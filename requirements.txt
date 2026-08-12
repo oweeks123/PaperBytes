@@ -5,3 +5,4 @@ pymed>=0.8.9
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
 pydantic>=2.0
+python-dotenv>=1.0

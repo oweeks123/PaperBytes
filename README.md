@@ -1,35 +1,44 @@
 # PaperBytes
 
-FastAPI service that searches PubMed for recent articles in a curated list of medical journals, summarises each with Claude, and stores results in Postgres.
-
-## Deploying to Heroku
-
-1. Create the app and add the Postgres add-on:
-   ```sh
-   heroku create your-app-name
-   heroku addons:create heroku-postgresql:essential-0
-   ```
-   The add-on sets `DATABASE_URL` automatically. Tables are created on startup.
-2. Set config vars:
-   ```sh
-   heroku config:set PUBMED_EMAIL=you@example.com
-   heroku config:set ANTHROPIC_API_KEY=sk-ant-...
-   heroku config:set CLAUDE_MODEL=claude-haiku-4-5   # optional; try claude-sonnet-4-6 for higher quality
-   heroku config:set LOOKBACK_DAYS=7                 # optional
-   ```
-3. Deploy:
-   ```sh
-   git push heroku HEAD:main
-   ```
-
-The `Procfile` runs `uvicorn` bound to Heroku's `$PORT`. For more throughput, run multiple workers with gunicorn (`web: gunicorn main:app -k uvicorn.workers.UvicornWorker`, add `gunicorn` to `requirements.txt`).
+FastAPI service that searches PubMed for recent articles in a curated list of medical journals, summarises each with Claude, and stores results in a SQL database.
 
 ## Running locally
 
-1. Start a local Postgres and create a database (e.g. `createdb paperbytes`).
-2. Copy `.env.example` to `.env` and fill it in, then export the vars (or use your preferred loader).
-3. `pip install -r requirements.txt`
-4. `python main.py` — listens on `$PORT` (default `8000`).
+No external services required — storage defaults to a local SQLite file.
+
+1. Install dependencies (a virtualenv is recommended):
+   ```sh
+   python -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+2. (Optional) Copy `.env.example` to `.env` and fill it in. It is auto-loaded on
+   startup. The `/fetch` endpoints need `PUBMED_EMAIL` and `ANTHROPIC_API_KEY`;
+   the read endpoints work without any config.
+3. Run it:
+   ```sh
+   python main.py            # http://localhost:8000
+   RELOAD=1 python main.py   # with auto-reload for development
+   ```
+   The `articles` table is created automatically on startup (in `paperbytes.db`).
+
+Then browse the interactive docs at `http://localhost:8000/docs`, or pull in some
+real data with `curl -XPOST "localhost:8000/fetch/sync?lookback_days=2"` (requires
+the two credentials above).
+
+## Configuration
+
+| Var | Required | Default | Notes |
+|---|---|---|---|
+| `PUBMED_EMAIL` | for `/fetch` | — | Contact email required by NCBI |
+| `ANTHROPIC_API_KEY` | for `/fetch` | — | From console.anthropic.com |
+| `DATABASE_URL` | no | `sqlite:///./paperbytes.db` | Point at Postgres for deployment |
+| `CLAUDE_MODEL` | no | `claude-haiku-4-5` | Try `claude-sonnet-4-6` for higher quality |
+| `LOOKBACK_DAYS` | no | `7` | Fetch window |
+| `PORT` | no | `8000` | Listen port |
+| `RELOAD` | no | off | Set `1` for uvicorn auto-reload |
+
+Storage is engine-agnostic (SQLAlchemy): SQLite locally, Postgres in a container.
+A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatically.
 
 ## Endpoints
 
@@ -44,10 +53,9 @@ The `Procfile` runs `uvicorn` bound to Heroku's `$PORT`. For more throughput, ru
 | `DELETE` | `/articles/{pubmed_id}` | Delete |
 | `GET` | `/specialties` | Count of articles per specialty |
 
-OpenAPI docs at `/docs`. Scheduled fetches can be driven by the [Heroku Scheduler](https://devcenter.heroku.com/articles/scheduler) add-on hitting `/fetch/sync`.
-
 ## Notes
 
 - Default model is `claude-haiku-4-5` since this is high-volume short-summary work — analog of the original `gpt-3.5-turbo`. Set `CLAUDE_MODEL=claude-sonnet-4-6` or `claude-opus-4-7` for higher quality.
 - Structured output uses Pydantic (`messages.parse`) instead of `ast.literal_eval` on raw text.
-- Storage is Postgres via SQLAlchemy; the `articles` table is created automatically on startup. Articles are keyed by PubMed ID, so re-running `/fetch` skips ones already stored.
+- Articles are keyed by PubMed ID, so re-running `/fetch` skips ones already stored. Specialties live in a related `article_specialties` table so filtering and counts run in portable SQL.
+- Deployment will be containerised later; the app already reads `DATABASE_URL` and `PORT` from the environment for that.
