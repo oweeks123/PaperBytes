@@ -5,11 +5,21 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import anthropic
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from pymed import PubMed
-from replit import db
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    DateTime,
+    String,
+    Text,
+    create_engine,
+    func,
+    select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("paperbytes")
@@ -53,10 +63,56 @@ CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
 PUBMED_EMAIL = os.environ["PUBMED_EMAIL"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 LOOKBACK_DAYS = int(os.environ.get("LOOKBACK_DAYS", "7"))
-ARTICLE_PREFIX = "article:"
+
+# Heroku provisions DATABASE_URL with the legacy "postgres://" scheme, which
+# SQLAlchemy no longer accepts — normalise it to "postgresql://".
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost/paperbytes")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Separator used to join the specialties array for substring filtering. Chosen
+# so it can never appear inside a specialty name or a user's query, which keeps
+# a match from spanning two adjacent array elements.
+_SPECIALTY_SEP = "\x1f"
 
 pubmed = PubMed(tool="PaperBytes", email=PUBMED_EMAIL)
 claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    pubmed_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String, nullable=False, default="")
+    abstract: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_specialties: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    publication_date: Mapped[str] = mapped_column(String, nullable=False, default="")
+    journal: Mapped[str] = mapped_column(String, nullable=False, default="")
+    pubmed_url: Mapped[str] = mapped_column(String, nullable=False)
+    sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "pubmed_id": self.pubmed_id,
+            "title": self.title,
+            "abstract": self.abstract,
+            "ai_summary": self.ai_summary,
+            "ai_specialties": list(self.ai_specialties or []),
+            "publication_date": self.publication_date,
+            "journal": self.journal,
+            "pubmed_url": self.pubmed_url,
+            "sent": self.sent,
+            "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
+        }
 
 
 class ArticleSummary(BaseModel):
@@ -64,21 +120,12 @@ class ArticleSummary(BaseModel):
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
 
 
-class Article(BaseModel):
-    pubmed_id: str
-    title: str
-    abstract: str
-    ai_summary: str
-    ai_specialties: list[str]
-    publication_date: str
-    journal: str
-    pubmed_url: str
-    sent: bool = False
-    fetched_at: str
-
-
-def _key(pubmed_id: str) -> str:
-    return f"{ARTICLE_PREFIX}{pubmed_id}"
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def summarise(abstract: str) -> ArticleSummary:
@@ -94,7 +141,7 @@ def summarise(abstract: str) -> ArticleSummary:
     return response.parsed_output
 
 
-def fetch_journal(journal: str, since: str, until: str) -> int:
+def fetch_journal(journal: str, since: str, until: str, db: Session) -> int:
     query = (
         f'(({journal}[Journal]) AND '
         f'(("{since}"[Date - Publication] : "{until}"[Date - Publication]))) '
@@ -102,10 +149,14 @@ def fetch_journal(journal: str, since: str, until: str) -> int:
     )
     saved = 0
     for result in pubmed.query(query, max_results=100):
-        pubmed_id = result.pubmed_id[0:8].strip()
+        # pymed returns pubmed_id as a newline-separated string (the article's
+        # PMID followed by any reference PMIDs). Take the first line; slicing by
+        # character count truncates 9-digit PMIDs into the wrong id.
+        raw_id = result.pubmed_id or ""
+        pubmed_id = raw_id.splitlines()[0].strip() if raw_id.strip() else ""
         if not pubmed_id:
             continue
-        if _key(pubmed_id) in db:
+        if db.get(Article, pubmed_id) is not None:
             continue
         if not result.abstract:
             continue
@@ -126,9 +177,10 @@ def fetch_journal(journal: str, since: str, until: str) -> int:
             journal=result.journal or journal,
             pubmed_url=f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/",
             sent=False,
-            fetched_at=dt.datetime.utcnow().isoformat(),
+            fetched_at=dt.datetime.now(dt.timezone.utc),
         )
-        db[_key(pubmed_id)] = article.model_dump()
+        db.add(article)
+        db.commit()
         saved += 1
     return saved
 
@@ -138,18 +190,24 @@ def fetch_all_journals(lookback_days: int) -> dict[str, int]:
     since = (today - dt.timedelta(days=lookback_days)).strftime("%Y/%m/%d")
     until = today.strftime("%Y/%m/%d")
     results: dict[str, int] = {}
-    for journal in JOURNALS:
-        try:
-            results[journal] = fetch_journal(journal, since, until)
-            log.info("Fetched %d new articles from %s", results[journal], journal)
-        except Exception as e:
-            log.exception("Failed fetching %s: %s", journal, e)
-            results[journal] = -1
+    db = SessionLocal()
+    try:
+        for journal in JOURNALS:
+            try:
+                results[journal] = fetch_journal(journal, since, until, db)
+                log.info("Fetched %d new articles from %s", results[journal], journal)
+            except Exception as e:
+                db.rollback()
+                log.exception("Failed fetching %s: %s", journal, e)
+                results[journal] = -1
+    finally:
+        db.close()
     return results
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    Base.metadata.create_all(engine)
     log.info("PaperBytes starting with model=%s lookback=%d days", CLAUDE_MODEL, LOOKBACK_DAYS)
     yield
 
@@ -184,64 +242,66 @@ def list_articles(
     sent: Optional[bool] = Query(None, description="Filter by sent status"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
 ):
-    matches: list[dict] = []
-    for key in db.prefix(ARTICLE_PREFIX):
-        article = dict(db[key])
-        if sent is not None and article.get("sent") != sent:
-            continue
-        if journal and journal.lower() not in article.get("journal", "").lower():
-            continue
-        if specialty:
-            specs = [s.lower() for s in article.get("ai_specialties", [])]
-            if not any(specialty.lower() in s for s in specs):
-                continue
-        matches.append(article)
+    stmt = select(Article)
+    if sent is not None:
+        stmt = stmt.where(Article.sent == sent)
+    if journal:
+        stmt = stmt.where(Article.journal.ilike(f"%{journal}%"))
+    if specialty:
+        joined = func.array_to_string(Article.ai_specialties, _SPECIALTY_SEP)
+        stmt = stmt.where(joined.ilike(f"%{specialty}%"))
 
-    matches.sort(key=lambda a: a.get("fetched_at", ""), reverse=True)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = db.scalars(
+        stmt.order_by(Article.fetched_at.desc()).limit(limit).offset(offset)
+    ).all()
     return {
-        "total": len(matches),
+        "total": total,
         "limit": limit,
         "offset": offset,
-        "articles": matches[offset : offset + limit],
+        "articles": [a.to_dict() for a in rows],
     }
 
 
 @app.get("/articles/{pubmed_id}")
-def get_article(pubmed_id: str):
-    key = _key(pubmed_id)
-    if key not in db:
+def get_article(pubmed_id: str, db: Session = Depends(get_db)):
+    article = db.get(Article, pubmed_id)
+    if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
-    return dict(db[key])
+    return article.to_dict()
 
 
 @app.patch("/articles/{pubmed_id}")
-def update_article(pubmed_id: str, sent: bool):
-    key = _key(pubmed_id)
-    if key not in db:
+def update_article(pubmed_id: str, sent: bool, db: Session = Depends(get_db)):
+    article = db.get(Article, pubmed_id)
+    if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
-    article = dict(db[key])
-    article["sent"] = sent
-    db[key] = article
-    return article
+    article.sent = sent
+    db.commit()
+    return article.to_dict()
 
 
 @app.delete("/articles/{pubmed_id}")
-def delete_article(pubmed_id: str):
-    key = _key(pubmed_id)
-    if key not in db:
+def delete_article(pubmed_id: str, db: Session = Depends(get_db)):
+    article = db.get(Article, pubmed_id)
+    if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
-    del db[key]
+    db.delete(article)
+    db.commit()
     return {"status": "deleted", "pubmed_id": pubmed_id}
 
 
 @app.get("/specialties")
-def list_specialties():
-    counts: dict[str, int] = {}
-    for key in db.prefix(ARTICLE_PREFIX):
-        for s in db[key].get("ai_specialties", []):
-            counts[s] = counts.get(s, 0) + 1
-    return dict(sorted(counts.items(), key=lambda kv: kv[1], reverse=True))
+def list_specialties(db: Session = Depends(get_db)):
+    specialty = func.unnest(Article.ai_specialties).label("specialty")
+    stmt = (
+        select(specialty, func.count().label("n"))
+        .group_by(specialty)
+        .order_by(func.count().desc())
+    )
+    return {row.specialty: row.n for row in db.execute(stmt).all()}
 
 
 if __name__ == "__main__":
