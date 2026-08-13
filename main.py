@@ -282,8 +282,9 @@ def build_mock_analysis(art: PubMedArticle) -> PaperAnalysis:
     note = "MOCK — enable Anthropic credits for a real AI appraisal."
     design = ", ".join(art.publication_types) or "Not specified"
     specialties = [m.term for m in art.mesh_terms if m.major_topic][:3] or ["General medicine"]
-    snippet = (art.abstract or "").strip()[:280]
-    summary = (snippet.rsplit(" ", 1)[0] + "…") if snippet else note
+    # Show the full abstract as the mock summary (the real AI summary is a short
+    # 50-word précis; here we don't truncate so the whole text is visible).
+    summary = (art.abstract or "").strip() or note
     return PaperAnalysis(
         summary=summary,
         specialties=specialties,
