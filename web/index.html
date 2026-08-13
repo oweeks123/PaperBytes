@@ -19,12 +19,10 @@
     </div>
   </header>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab is-active" data-tab="home" role="tab">Home (free tier)</button>
-    <button class="tab" data-tab="search" role="tab">Search PubMed</button>
-    <button class="tab" data-tab="stored" role="tab">Stored articles</button>
-    <button class="tab" data-tab="specialties" role="tab">Specialties</button>
-    <button class="tab reading-tab" data-tab="reading" role="tab" hidden>Reading list</button>
+  <!-- Tabs (Home + Reading list) are shown for the paid tier only. -->
+  <nav class="tabs" role="tablist" hidden>
+    <button class="tab is-active" data-tab="home" role="tab">Home</button>
+    <button class="tab" data-tab="reading" role="tab">Reading list</button>
   </nav>
 
   <main>
@@ -37,69 +35,6 @@
         <span id="tier-note" class="tier-note"></span>
       </div>
       <div id="home-article" class="home-article"></div>
-    </section>
-
-    <!-- ───────────── Live PubMed search (GET /search) ───────────── -->
-    <section id="tab-search" class="tabpane">
-      <form id="search-form" class="controls">
-        <label>Days back
-          <input type="number" name="days_back" value="7" min="0" />
-        </label>
-        <label>Date field
-          <select name="date_field">
-            <option value="mhda" selected>MeSH date (mhda)</option>
-            <option value="edat">Entrez date (edat)</option>
-            <option value="pdat">Publication date (pdat)</option>
-          </select>
-        </label>
-        <label>Journal scope
-          <select name="journal_scope">
-            <option value="curated" selected>Curated bucket</option>
-            <option value="all">All PubMed</option>
-            <option value="aim">AIM (retired)</option>
-          </select>
-        </label>
-        <label>Limit
-          <input type="number" name="limit" value="20" min="1" max="200" />
-        </label>
-        <label class="check"><input type="checkbox" name="restrict_humans" checked /> humans[MeSH]</label>
-        <label class="check"><input type="checkbox" name="restrict_english" checked /> English</label>
-        <button type="submit" class="btn">Search</button>
-      </form>
-      <div id="search-meta" class="meta"></div>
-      <div id="search-results" class="results"></div>
-    </section>
-
-    <!-- ───────────── Stored articles (GET /articles) ───────────── -->
-    <section id="tab-stored" class="tabpane">
-      <form id="stored-form" class="controls">
-        <label>Specialty
-          <input type="text" name="specialty" placeholder="e.g. Cardiology" />
-        </label>
-        <label>Journal
-          <input type="text" name="journal" placeholder="e.g. Lancet" />
-        </label>
-        <label>Sent
-          <select name="sent">
-            <option value="">any</option>
-            <option value="true">sent</option>
-            <option value="false">unsent</option>
-          </select>
-        </label>
-        <label>Limit
-          <input type="number" name="limit" value="20" min="1" max="500" />
-        </label>
-        <button type="submit" class="btn">Load</button>
-      </form>
-      <div id="stored-meta" class="meta"></div>
-      <div id="stored-results" class="results"></div>
-    </section>
-
-    <!-- ───────────── Specialties (GET /specialties) ───────────── -->
-    <section id="tab-specialties" class="tabpane">
-      <button id="specialties-refresh" class="btn">Refresh</button>
-      <div id="specialties-meta" class="meta"></div>
-      <div id="specialties-results" class="chips"></div>
     </section>
 
     <!-- ───────────── Reading list (paid tier; /reading-list) ───────────── -->
