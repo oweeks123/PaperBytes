@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     # Owned by main.py's summarise(); surfaced here so all config lives together.
     anthropic_api_key: str | None = None
     claude_model: str = "claude-haiku-4-5"
+    # When true, the /random appraisal is filled from article metadata instead of
+    # calling Anthropic — lets the UI be demoed/designed without API credits.
+    # Mock results are not treated as a real cache entry, so turning this off
+    # (once credits exist) transparently swaps in real AI analysis.
+    mock_analysis: bool = False
 
     # --- Fetch window ------------------------------------------------------
     lookback_days: int = 7

@@ -17,3 +17,7 @@ env/
 # Local SQLite database
 *.db
 *.sqlite3
+
+# Local generated artifacts
+*_preview.png
+/summary.pdf

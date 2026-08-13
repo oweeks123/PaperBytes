@@ -31,9 +31,17 @@ No external services required — storage defaults to a local SQLite file.
 
 Then browse the interactive docs at `http://localhost:8000/docs`, or open the
 **demo UI at `http://localhost:8000/ui/`** — a plain HTML/CSS/JS page (in `web/`,
-no build step) that exercises `/search`, `/articles`, and `/specialties` so the
-API's behaviour and shape are easy to see and iterate on. To preview what
-retrieval pulls without summarising or storing:
+no build step). Its **Home (free tier)** tab shows a single random appraised paper
+(summary, critical-appraisal table, reported statistics, PubMed link, Download-PDF)
+and re-rolls on refresh; the other tabs exercise `/search`, `/articles`, and
+`/specialties`.
+
+The `/random` and `/fetch` endpoints call Anthropic to generate the summary +
+appraisal (one call per paper, then cached). **Without API credits, set
+`MOCK_ANALYSIS=1`** to fill the appraisal from article metadata so the whole UI is
+demoable; turn it off once credits are available for real AI analysis.
+
+To preview what retrieval pulls without summarising or storing:
 
 ```sh
 curl "localhost:8000/search?days_back=3&limit=5"          # AIM core journals
@@ -72,6 +80,7 @@ free API key raises that to 10/s:
 | `LOG_LEVEL` | no | `INFO` | structlog level |
 | `PORT` | no | `8000` | Listen port |
 | `RELOAD` | no | off | Set `1` for uvicorn auto-reload |
+| `MOCK_ANALYSIS` | no | off | Set `1` to fill `/random` appraisals from metadata instead of calling Anthropic (demo without API credits) |
 
 Storage is engine-agnostic (SQLAlchemy): SQLite locally, Postgres in a container.
 A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatically.
@@ -80,7 +89,9 @@ A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatic
 
 | Method | Path | What it does |
 |---|---|---|
-| `GET` | `/` | Health + config (model, NCBI key configured, rate limit) |
+| `GET` | `/` | Health + config (model, NCBI key configured, rate limit, mock flag) |
+| `GET` | `/random` | Free-tier home feed: a random article from the past N days (default 30) with an AI summary + critical-appraisal table. Analyses each paper once, then caches |
+| `GET` | `/articles/{pubmed_id}/summary.pdf` | Portfolio PDF of a stored article's summary + appraisal |
 | `GET` | `/search` | Live retrieval preview (query params). Does not summarise or store. Returns the resolved NCBI term |
 | `POST` | `/search` | Same, taking a full `SearchFilters` body (custom pub-types, MeSH terms, `extra_terms`) |
 | `POST` | `/fetch` | Kick off a background fetch+summarise+store pass |

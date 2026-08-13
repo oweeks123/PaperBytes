@@ -93,6 +93,81 @@ function storedCard(a) {
   </article>`;
 }
 
+/* ----------------------------------------------------------- home tab --- */
+function outcomesTable(outcomes) {
+  if (!outcomes || !outcomes.length) return "";
+  const rows = outcomes
+    .map(
+      (o) => `<tr>
+        <td>${esc(o.name)}</td><td>${esc(o.measure || "—")}</td><td>${esc(o.value || "—")}</td>
+        <td>${esc(o.confidence_interval || "—")}</td><td>${esc(o.p_value || "—")}</td></tr>`
+    )
+    .join("");
+  return `<h4 class="ap-h">Reported statistics</h4>
+    <table class="stats-table">
+      <thead><tr><th>Outcome</th><th>Measure</th><th>Value</th><th>95% CI</th><th>p</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+}
+
+function appraisalTable(ap) {
+  if (!ap) return "";
+  const row = (k, v) => `<tr><th>${k}</th><td>${esc(v || "—")}</td></tr>`;
+  return `<h4 class="ap-h">Critical appraisal</h4>
+    <table class="appraisal-table"><tbody>
+      ${row("Study design", ap.study_design)}
+      ${row("Population", ap.population)}
+      ${row("Intervention", ap.intervention)}
+      ${row("Comparator", ap.comparator)}
+      ${row("Risk of bias", ap.risk_of_bias)}
+      ${row("Level of evidence", ap.level_of_evidence)}
+      ${row("Limitations", ap.limitations)}
+    </tbody></table>
+    ${outcomesTable(ap.outcomes)}`;
+}
+
+function renderHomeArticle(a) {
+  const meta = [
+    a.journal && `<b>${esc(a.journal)}</b>`,
+    a.publication_date,
+    a.authors?.length ? esc(a.authors.slice(0, 6).join(", ")) + (a.authors.length > 6 ? " et al." : "") : null,
+    a.doi ? `doi:${esc(a.doi)}` : null,
+  ].filter(Boolean).join(" · ");
+
+  const badge = a.cached
+    ? `<span class="badge cached">cached</span>`
+    : `<span class="badge fresh">freshly appraised</span>`;
+  const mockBadge = a.mock ? `<span class="badge mock">MOCK — add AI credits for real appraisal</span>` : "";
+  const specs = (a.specialties || []).map((s) => `<span class="tag pt">${esc(s)}</span>`).join("");
+
+  return `<article class="card home-card">
+    <div class="home-badges">${mockBadge}${badge}${specs}</div>
+    <h2><a href="${esc(a.pubmed_url)}" target="_blank" rel="noreferrer">${esc(a.title)}</a></h2>
+    <div class="sub">${meta} · PMID ${esc(a.pmid)}</div>
+    <div class="summary">${esc(a.summary)}</div>
+    ${appraisalTable(a.appraisal)}
+    <div class="home-actions">
+      <a class="btn" href="/articles/${encodeURIComponent(a.pmid)}/summary.pdf">⬇ Download summary (PDF)</a>
+      <a class="btn ghost" href="${esc(a.pubmed_url)}" target="_blank" rel="noreferrer">View on PubMed</a>
+    </div>
+  </article>`;
+}
+
+async function loadRandom() {
+  const out = $("#home-article");
+  const btn = $("#home-next");
+  btn.disabled = true;
+  out.innerHTML = `<div class="spin">Fetching a random paper… new papers are AI-appraised on the fly (a few seconds); seen papers are instant.</div>`;
+  try {
+    const a = await apiGet("/random", { days_back: 30 });
+    out.innerHTML = renderHomeArticle(a);
+  } catch (err) {
+    out.innerHTML = `<div class="meta err">Error: ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("#home-next").addEventListener("click", loadRandom);
+
 /* --------------------------------------------------------- search tab --- */
 $("#search-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -177,4 +252,4 @@ $("#specialties-refresh").addEventListener("click", loadSpecialties);
 
 /* ------------------------------------------------------------- startup --- */
 loadHealth();
-$("#search-form").dispatchEvent(new Event("submit")); // run a default search on load
+loadRandom(); // free-tier home: show a random appraised paper on load

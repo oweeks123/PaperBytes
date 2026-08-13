@@ -16,14 +16,24 @@
   </header>
 
   <nav class="tabs" role="tablist">
-    <button class="tab is-active" data-tab="search" role="tab">Search PubMed</button>
+    <button class="tab is-active" data-tab="home" role="tab">Home (free tier)</button>
+    <button class="tab" data-tab="search" role="tab">Search PubMed</button>
     <button class="tab" data-tab="stored" role="tab">Stored articles</button>
     <button class="tab" data-tab="specialties" role="tab">Specialties</button>
   </nav>
 
   <main>
+    <!-- ───────────── Free tier: one random appraised paper (GET /random) ───── -->
+    <section id="tab-home" class="tabpane is-active">
+      <div class="home-bar">
+        <button id="home-next" class="btn">New random article</button>
+        <span class="home-hint">One random appraised paper from the last 30 days. Refresh (or click) for another — each paper is AI-appraised once, then cached.</span>
+      </div>
+      <div id="home-article" class="home-article"></div>
+    </section>
+
     <!-- ───────────── Live PubMed search (GET /search) ───────────── -->
-    <section id="tab-search" class="tabpane is-active">
+    <section id="tab-search" class="tabpane">
       <form id="search-form" class="controls">
         <label>Days back
           <input type="number" name="days_back" value="7" min="0" />

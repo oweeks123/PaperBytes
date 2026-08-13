@@ -1,6 +1,7 @@
 import datetime as dt
 import logging
 import os
+import random
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -16,11 +17,12 @@ except ImportError:
 
 import anthropic
 import structlog
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -40,6 +42,7 @@ from sqlalchemy.orm import (
 )
 
 from paperbytes.config import Settings, get_settings
+from paperbytes.pdf import build_summary_pdf
 from paperbytes.pubmed import filters
 from paperbytes.pubmed.client import PubMedClient, PubMedError
 from paperbytes.pubmed.models import (
@@ -50,6 +53,7 @@ from paperbytes.pubmed.models import (
     SearchResponse,
     to_storage_fields,
 )
+from paperbytes.pubmed.query import build_search_term
 
 settings = get_settings()
 
@@ -126,6 +130,15 @@ class Article(Base):
     publication_date: Mapped[str] = mapped_column(String, nullable=False, default="")
     journal: Mapped[str] = mapped_column(String, nullable=False, default="")
     pubmed_url: Mapped[str] = mapped_column(String, nullable=False)
+    doi: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Author display names, stored so cached /random responses are complete.
+    authors: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Cached CriticalAppraisal dict. Non-null means this paper has been analysed,
+    # so it is served without re-billing Anthropic.
+    appraisal: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # True if the stored appraisal is a metadata-derived mock (MOCK_ANALYSIS mode),
+    # not a real Anthropic result — so it can be replaced once credits are added.
+    analysis_mock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -145,6 +158,9 @@ class Article(Base):
             "publication_date": self.publication_date,
             "journal": self.journal,
             "pubmed_url": self.pubmed_url,
+            "doi": self.doi,
+            "authors": self.authors or [],
+            "appraisal": self.appraisal,
             "sent": self.sent,
             "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
         }
@@ -153,6 +169,59 @@ class Article(Base):
 class ArticleSummary(BaseModel):
     summary: str = Field(description="50-word-or-fewer summary of the article's aim and key findings")
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
+
+
+class Outcome(BaseModel):
+    name: str = Field(description="The outcome that was measured")
+    measure: Optional[str] = Field(default=None, description="Effect measure, e.g. HR, RR, OR, mean difference")
+    value: Optional[str] = Field(default=None, description="Point estimate, e.g. 0.82")
+    confidence_interval: Optional[str] = Field(default=None, description="95% confidence interval, e.g. 0.70-0.96")
+    p_value: Optional[str] = Field(default=None, description="p-value if reported")
+
+
+class CriticalAppraisal(BaseModel):
+    study_design: str = Field(description="e.g. randomised controlled trial, cohort, meta-analysis")
+    population: str = Field(description="Population/setting and sample size")
+    intervention: str = Field(description="Intervention or exposure studied")
+    comparator: str = Field(description="Comparator or control")
+    outcomes: list[Outcome] = Field(description="Every reported outcome with its statistics")
+    risk_of_bias: str = Field(description="Risk of bias / methodological quality")
+    level_of_evidence: str = Field(description="Level of evidence, e.g. Oxford CEBM 1b")
+    limitations: str = Field(description="Key limitations")
+
+
+class PaperAnalysis(BaseModel):
+    summary: str = Field(description="50-word-or-fewer summary of the article's aim and key findings")
+    specialties: list[str] = Field(description="Medical specialties this article is relevant to")
+    appraisal: CriticalAppraisal
+
+
+class RandomArticleResponse(BaseModel):
+    pmid: str
+    title: str
+    journal: Optional[str] = None
+    authors: list[str] = Field(default_factory=list)
+    publication_date: Optional[str] = None
+    doi: Optional[str] = None
+    pubmed_url: str
+    abstract: Optional[str] = None
+    summary: str
+    specialties: list[str]
+    appraisal: CriticalAppraisal
+    cached: bool = Field(description="True if served from the cache (no Anthropic call was made)")
+    mock: bool = Field(default=False, description="True if the appraisal is a metadata-derived mock (no AI credits)")
+
+
+APPRAISAL_TASK = (
+    "You are a clinical evidence appraiser. From the journal article abstract, produce: "
+    "(1) a summary of 50 words or fewer of the aim and key findings; "
+    "(2) the medical specialties it is relevant to; and "
+    "(3) a structured critical appraisal — study design, population (with sample size), "
+    "intervention, comparator, every reported outcome with its statistics (effect measure, "
+    "point estimate, 95% CI, p-value), risk of bias, level of evidence, and key limitations. "
+    "Extract statistics verbatim where reported; leave a field blank if the abstract does not "
+    "state it. Do not invent numbers."
+)
 
 
 def get_db():
@@ -186,6 +255,70 @@ def summarise(abstract: str) -> ArticleSummary:
     if response.parsed_output is None:
         raise ValueError(f"Claude returned no parseable output (stop_reason={response.stop_reason})")
     return response.parsed_output
+
+
+def analyse(abstract: str) -> PaperAnalysis:
+    """Summarise + critically appraise an abstract in one Claude call. Synchronous
+    (blocking SDK call); async callers wrap it in ``run_in_threadpool``. Used by the
+    on-demand /random path, where each paper is analysed at most once and cached."""
+    response = get_claude().messages.parse(
+        model=settings.claude_model,
+        max_tokens=2048,
+        system=APPRAISAL_TASK,
+        messages=[{"role": "user", "content": f"Abstract:\n{abstract}"}],
+        output_format=PaperAnalysis,
+    )
+    if response.parsed_output is None:
+        raise ValueError(f"Claude returned no parseable output (stop_reason={response.stop_reason})")
+    return response.parsed_output
+
+
+def build_mock_analysis(art: PubMedArticle) -> PaperAnalysis:
+    """A metadata-derived placeholder appraisal used when MOCK_ANALYSIS is on (no
+    Anthropic credits). Real fields (study design from publication types, a summary
+    snippet, specialties from major MeSH) are populated where possible; the rest is
+    clearly marked MOCK so the UI/PDF layout can be exercised without pretending to
+    be a real appraisal."""
+    note = "MOCK — enable Anthropic credits for a real AI appraisal."
+    design = ", ".join(art.publication_types) or "Not specified"
+    specialties = [m.term for m in art.mesh_terms if m.major_topic][:3] or ["General medicine"]
+    snippet = (art.abstract or "").strip()[:280]
+    summary = (snippet.rsplit(" ", 1)[0] + "…") if snippet else note
+    return PaperAnalysis(
+        summary=summary,
+        specialties=specialties,
+        appraisal=CriticalAppraisal(
+            study_design=design,
+            population=note,
+            intervention=note,
+            comparator=note,
+            outcomes=[
+                Outcome(name="MOCK outcome", measure="RR", value="0.00", confidence_interval="0.00–0.00", p_value="—")
+            ],
+            risk_of_bias=note,
+            level_of_evidence="—",
+            limitations=note,
+        ),
+    )
+
+
+def _random_response(a: "Article", *, cached: bool) -> RandomArticleResponse:
+    """Build the /random payload from a stored (analysed) Article row."""
+    return RandomArticleResponse(
+        pmid=a.pubmed_id,
+        title=a.title,
+        journal=a.journal or None,
+        authors=list(a.authors or []),
+        publication_date=a.publication_date or None,
+        doi=a.doi,
+        pubmed_url=a.pubmed_url,
+        abstract=a.abstract,
+        summary=a.ai_summary,
+        specialties=[s.name for s in a.specialties],
+        appraisal=CriticalAppraisal(**(a.appraisal or {})),
+        cached=cached,
+        mock=a.analysis_mock,
+    )
 
 
 async def run_fetch(spec: SearchFilters) -> dict:
@@ -294,6 +427,7 @@ def health():
         "journals": len(filters.CURATED_JOURNALS),
         "ncbi_api_key_configured": bool(settings.ncbi_api_key),
         "ncbi_rate_limit": settings.ncbi_rate_limit,
+        "mock_analysis": settings.mock_analysis,
     }
 
 
@@ -406,6 +540,93 @@ async def fetch_sync(lookback_days: Optional[int] = None):
         "seen": result["seen"],
         "resolved_term": term,
     }
+
+
+@app.get("/random", response_model=RandomArticleResponse)
+async def random_article(
+    days_back: int = Query(30, ge=1, le=365, description="Draw from the past N days."),
+    client: PubMedClient = Depends(get_pubmed_client),
+    db: Session = Depends(get_db),
+):
+    """Free-tier home feed. Pick a random article from the past ``days_back`` days
+    (curated journals). If it has already been analysed, serve the cached summary +
+    appraisal (no Anthropic call); otherwise fetch it, run one Claude call, store,
+    and serve. Each paper is therefore analysed at most once."""
+    _require_fetch_credentials()
+    spec = SearchFilters(days_back=days_back, journal_scope=JournalScope.CURATED)
+    term = build_search_term(spec, default_lookback_days=settings.lookback_days)
+    try:
+        head = await client.esearch(term, retmax=0)
+        if head.count == 0:
+            raise HTTPException(status_code=404, detail=f"No articles found in the past {days_back} days")
+        # Draw one random PMID via a 1-record page at a random offset — avoids
+        # pulling the whole id list.
+        offset = random.randrange(head.count)
+        page = await client.esearch(term, retmax=1, retstart=offset)
+        if not page.idlist:
+            raise HTTPException(status_code=404, detail="No article at the drawn offset; try again")
+        pmid = page.idlist[0]
+
+        # Cache hit only if a *real* appraisal exists (or we're in mock mode, where a
+        # stored mock is fine to reuse). A stored mock is a miss in real mode, so it
+        # gets replaced by real AI once credits are added.
+        existing = db.get(Article, pmid)
+        if existing is not None and existing.appraisal and (
+            settings.mock_analysis or not existing.analysis_mock
+        ):
+            log.info("random_cache_hit", pmid=pmid, mock=existing.analysis_mock)
+            return _random_response(existing, cached=True)
+
+        fetched = await client.efetch(ids=[pmid])
+        if not fetched:
+            raise HTTPException(status_code=404, detail=f"Could not fetch article {pmid}")
+        art = fetched[0]
+        if not art.abstract:
+            raise HTTPException(status_code=422, detail=f"Article {pmid} has no abstract to appraise")
+    except PubMedError as e:
+        raise HTTPException(status_code=502, detail=f"PubMed retrieval failed: {e}")
+    finally:
+        await client.aclose()
+
+    if settings.mock_analysis:
+        analysis = build_mock_analysis(art)
+    else:
+        analysis = await run_in_threadpool(analyse, art.abstract)
+
+    article = existing or Article(pubmed_id=pmid, fetched_at=dt.datetime.now(dt.timezone.utc))
+    for key, value in to_storage_fields(art).items():
+        setattr(article, key, value)
+    article.ai_summary = analysis.summary
+    article.appraisal = analysis.appraisal.model_dump()
+    article.analysis_mock = settings.mock_analysis
+    article.doi = art.doi
+    article.authors = [au.name for au in art.authors]
+    article.sent = article.sent if existing is not None else False
+    article.specialties = [Specialty(name=s) for s in dict.fromkeys(analysis.specialties)]
+    if existing is None:
+        db.add(article)
+    db.commit()
+    log.info("random_analysed", pmid=pmid, mock=settings.mock_analysis)
+    return _random_response(article, cached=False)
+
+
+@app.get("/articles/{pubmed_id}/summary.pdf")
+def article_pdf(pubmed_id: str, db: Session = Depends(get_db)):
+    """Download a portfolio PDF of the summary + critical appraisal for a stored,
+    already-analysed article."""
+    a = db.get(Article, pubmed_id)
+    if a is None or not a.appraisal:
+        raise HTTPException(
+            status_code=404,
+            detail="No stored appraisal for this article — open it via /random first.",
+        )
+    pdf = build_summary_pdf(a.to_dict() | {"pmid": a.pubmed_id, "summary": a.ai_summary,
+                                           "specialties": [s.name for s in a.specialties]})
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="paperbytes-{pubmed_id}.pdf"'},
+    )
 
 
 @app.get("/articles")
