@@ -29,7 +29,10 @@ No external services required — storage defaults to a local SQLite file.
    ```
    The tables are created automatically on startup (in `paperbytes.db`).
 
-Then browse the interactive docs at `http://localhost:8000/docs`. To preview what
+Then browse the interactive docs at `http://localhost:8000/docs`, or open the
+**demo UI at `http://localhost:8000/ui/`** — a plain HTML/CSS/JS page (in `web/`,
+no build step) that exercises `/search`, `/articles`, and `/specialties` so the
+API's behaviour and shape are easy to see and iterate on. To preview what
 retrieval pulls without summarising or storing:
 
 ```sh

@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 from typing import Optional
 
 # Load a local .env file if present (development convenience; optional dependency).
@@ -17,6 +18,7 @@ import anthropic
 import structlog
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import (
     Boolean,
@@ -276,6 +278,12 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="PaperBytes", lifespan=lifespan)
+
+# Demo UI (plain static HTML/CSS/JS) served same-origin so it can call the API
+# without CORS. Browse it at /ui/. Optional — skipped if the directory is absent.
+_WEB_DIR = Path(__file__).parent / "web"
+if _WEB_DIR.is_dir():
+    app.mount("/ui", StaticFiles(directory=_WEB_DIR, html=True), name="ui")
 
 
 @app.get("/")
