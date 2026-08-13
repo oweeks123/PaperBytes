@@ -76,9 +76,11 @@ structlog.configure(
 log = structlog.get_logger("paperbytes")
 
 SUMMARY_TASK = (
-    "Summarise the aim of the following journal article abstract by extracting the "
-    "salient points. The summary must be 50 words or fewer. Also list the medical "
-    "specialties the article is relevant to (e.g. 'Cardiology', 'Emergency Medicine')."
+    "Summarise the following journal article abstract in a relaxed, conversational tone — "
+    "as if you were explaining it to a colleague over coffee — capturing the aim and the key "
+    "findings. Write up to 200 words, but use only as many as the paper genuinely warrants; do "
+    "not pad. Also list the medical specialties the article is relevant to (e.g. 'Cardiology', "
+    "'Emergency Medicine')."
 )
 
 # Anthropic client is created lazily so the app can boot (and serve read-only
@@ -167,7 +169,7 @@ class Article(Base):
 
 
 class ArticleSummary(BaseModel):
-    summary: str = Field(description="50-word-or-fewer summary of the article's aim and key findings")
+    summary: str = Field(description="Conversational summary of up to 200 words (concise, not padded) of the article's aim and key findings")
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
 
 
@@ -191,7 +193,7 @@ class CriticalAppraisal(BaseModel):
 
 
 class PaperAnalysis(BaseModel):
-    summary: str = Field(description="50-word-or-fewer summary of the article's aim and key findings")
+    summary: str = Field(description="Conversational summary of up to 200 words (concise, not padded) of the article's aim and key findings")
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
     appraisal: CriticalAppraisal
 
@@ -214,13 +216,17 @@ class RandomArticleResponse(BaseModel):
 
 APPRAISAL_TASK = (
     "You are a clinical evidence appraiser. From the journal article abstract, produce: "
-    "(1) a summary of 50 words or fewer of the aim and key findings; "
+    "(1) a summary of up to 200 words of the aim and key findings, written in a relaxed, "
+    "conversational tone — as if explaining the paper to a colleague over coffee. Keep it "
+    "clear and engaging rather than stiff and academic, but use only as many words as the "
+    "paper genuinely warrants; do not pad for the sake of length. "
     "(2) the medical specialties it is relevant to; and "
     "(3) a structured critical appraisal — study design, population (with sample size), "
     "intervention, comparator, every reported outcome with its statistics (effect measure, "
     "point estimate, 95% CI, p-value), risk of bias, level of evidence, and key limitations. "
-    "Extract statistics verbatim where reported; leave a field blank if the abstract does not "
-    "state it. Do not invent numbers."
+    "The critical appraisal fields stay precise and clinical — the conversational tone is only "
+    "for the summary. Extract statistics verbatim where reported; leave a field blank if the "
+    "abstract does not state it. Do not invent numbers."
 )
 
 
@@ -247,7 +253,7 @@ def summarise(abstract: str) -> ArticleSummary:
     retrieval work."""
     response = get_claude().messages.parse(
         model=settings.claude_model,
-        max_tokens=1024,
+        max_tokens=2048,
         system=SUMMARY_TASK,
         messages=[{"role": "user", "content": f"Abstract:\n{abstract}"}],
         output_format=ArticleSummary,
@@ -263,7 +269,7 @@ def analyse(abstract: str) -> PaperAnalysis:
     on-demand /random path, where each paper is analysed at most once and cached."""
     response = get_claude().messages.parse(
         model=settings.claude_model,
-        max_tokens=2048,
+        max_tokens=4096,
         system=APPRAISAL_TASK,
         messages=[{"role": "user", "content": f"Abstract:\n{abstract}"}],
         output_format=PaperAnalysis,
