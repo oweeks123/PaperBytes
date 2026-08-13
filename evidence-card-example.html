@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Evidence Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+
+:root{--felt:#0F1B30;--card:#F6F2E6;--ink:#161C28;--muted:#6E7688;--h1:#7BE0D6;--h2:#B98CF5;--h3:#F5A8C8;--green:#2E9E7B;--red:#C6473F;--amber:#D9922F}
+*{box-sizing:border-box;margin:0;padding:0}
+body{max-width:1440px;margin:0 auto;background:radial-gradient(120% 80% at 50% -10%,#1E3455 0%,var(--felt) 55%,#070F1C 100%);color:#EAF0FA;font-family:'Archivo',sans-serif;padding:30px 52px 40px}
+.bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.bar h1{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:.03em;line-height:1;background:linear-gradient(92deg,var(--h1),var(--h2) 50%,var(--h3));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.bar .sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8296B5;margin-top:5px}
+.deal{text-decoration:none;display:inline-block;font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:.07em;background:linear-gradient(92deg,var(--h1),var(--h2));color:#0F1B30;padding:14px 30px;border-radius:11px;box-shadow:0 6px 22px rgba(140,120,240,.35)}
+.stage{display:grid;grid-template-columns:1fr 856px 1fr;align-items:start;gap:34px}
+.card{border-radius:20px;padding:9px;background:linear-gradient(135deg,var(--h1),var(--h2) 34%,var(--h3) 62%,var(--h1));box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 50px rgba(150,120,240,.35)}
+.face{background:var(--card);border-radius:13px;color:var(--ink);overflow:hidden}
+.hdr{display:flex;align-items:flex-start;gap:16px;padding:16px 20px 12px}
+.hdr h2{font-family:'Bebas Neue',sans-serif;font-size:35px;line-height:.97;letter-spacing:.01em;flex:1}
+.gem{width:58px;height:58px;border-radius:50%;flex:none;background:linear-gradient(135deg,var(--h1),var(--h2) 55%,var(--h3));box-shadow:inset 0 0 0 3px rgba(255,255,255,.8),0 3px 8px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.gem b{font-family:'Bebas Neue',sans-serif;font-size:26px;color:#101827}
+.gem i{font-family:'JetBrains Mono',monospace;font-size:6px;letter-spacing:.1em;font-style:normal;color:#2A3346;margin-top:1px}
+.tags{display:flex;gap:7px;padding:0 20px 12px;flex-wrap:wrap}
+.tags span{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid rgba(22,28,40,.3);padding:4px 8px;border-radius:4px;color:#3F4859}
+.tags .new{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.tags .warnt{border-color:var(--amber);color:#8A5A12;background:rgba(217,146,47,.14)}
+.art{margin:0 20px;border-radius:8px;border:1px solid rgba(22,28,40,.3);background:linear-gradient(165deg,#1C3459,#2F5D8C 55%,#5FA1B4);position:relative;overflow:hidden;padding:14px 18px 12px}
+.art:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(118deg,rgba(255,255,255,.08) 0 3px,transparent 3px 13px)}
+.art:after{content:"";position:absolute;right:-50px;top:-70px;width:240px;height:240px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.35),transparent)}
+.artlbl{position:relative;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.8);margin-bottom:9px}
+.fp{position:relative}
+.fprow{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.fprow em{font-style:normal;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.06em;color:rgba(255,255,255,.92);width:104px;text-align:right;text-transform:uppercase}
+.track{position:relative;flex:1;height:13px}
+.track:before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:rgba(255,255,255,.55)}
+.ci{position:absolute;top:6px;height:1.5px;background:rgba(255,255,255,.85)}
+.ci:before,.ci:after{content:"";position:absolute;top:-3px;width:1.5px;height:7px;background:rgba(255,255,255,.85)}
+.ci:before{left:0}.ci:after{right:0}
+.dotm{position:absolute;top:2.5px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px rgba(28,52,89,.6)}
+.ns .ci,.ns .ci:before,.ns .ci:after{background:rgba(255,255,255,.42)}
+.ns .dotm{background:rgba(255,255,255,.5);box-shadow:0 0 0 1.5px rgba(28,52,89,.4)}
+.fprow u{text-decoration:none;font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.92);width:66px}
+.fprow.ns u{color:rgba(255,255,255,.55)}
+.axis{position:relative;display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.1em;color:rgba(255,255,255,.7);margin:6px 0 0 116px;padding-right:66px}
+.typeline{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin:12px 20px 0;padding-bottom:10px;border-bottom:1px solid rgba(22,28,40,.2);color:#3B4453;display:flex;justify-content:space-between}
+.rules{margin:12px 20px 0;font-size:14.5px;line-height:1.58;color:#232A38}
+.rules p{margin-bottom:9px}
+.rules b{background:linear-gradient(180deg,transparent 58%,rgba(123,224,214,.55) 58%);font-weight:600}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;margin:14px 20px 0;padding-top:13px;border-top:1px solid rgba(22,28,40,.2)}
+.blk h4{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.14em;color:var(--muted);margin-bottom:9px}
+.st{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.st b{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:96px;font-weight:400;white-space:nowrap}
+.pips{display:flex;gap:2.5px;flex:1}
+.pips i{height:9px;flex:1;background:#DBD4C3;border-radius:1px}
+.pips i.f{background:var(--ink)}
+.pips i.g{background:var(--green)}
+.pips i.r{background:var(--red)}
+.pips i.a{background:var(--amber)}
+.st u{font-family:'JetBrains Mono',monospace;font-size:9px;text-decoration:none;width:62px;text-align:right;font-weight:700;white-space:nowrap}
+.pico dt{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pico dd{font-size:13px;line-height:1.4;margin:1px 0 8px;font-weight:600}
+.flavour{margin:12px 20px 0;font-size:12.5px;font-style:italic;color:#565E6E;line-height:1.5;border-top:1px dashed rgba(22,28,40,.28);padding-top:10px}
+.flavour b{font-style:normal;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:4px}
+.foot2{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.06em;color:var(--muted);padding:12px 20px}
+.rarity{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.18em;text-align:center;padding:9px;color:#0F1B30;font-weight:700}
+.acts{display:flex;flex-direction:column;gap:10px;padding-top:6px}
+.acts a{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;color:#C6D5EC;border:1px solid #2E4468;border-radius:11px;padding:13px 15px;text-align:center}
+.acts a.primary{background:#EAF0FA;color:var(--felt);border-color:#EAF0FA;font-weight:700}
+.side h5{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.14em;color:#7F93B4;margin-bottom:10px}
+.tier div{border-radius:9px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.1em;color:#0F1B30;line-height:1.6;margin-bottom:7px}
+.tier b{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.06em;display:block}
+.t1{background:linear-gradient(120deg,var(--h1),var(--h2))}
+.t2{background:linear-gradient(120deg,#F2D48A,#D9A63C)}
+.t3{background:linear-gradient(120deg,#D6E1EC,#9FB0C4)}
+.t4{background:linear-gradient(120deg,#8A94A6,#5B6474)}
+.off{opacity:.3}
+.deck{border:1px solid #2A3E60;border-radius:14px;padding:16px 18px;background:rgba(255,255,255,.04)}
+.deck h5{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.14em;color:#7F93B4;margin-bottom:11px}
+.dk{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07);font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#8FA2BE}
+.dk:last-child{border:0}
+.dk b{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.03em;color:#EAF0FA}
+.ad{border:1px dashed #33507A;border-radius:14px;padding:12px;text-align:center;margin-top:18px}
+.ad span{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.2em;color:#6F86AA}
+.ad div{margin-top:8px;height:520px;border-radius:9px;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#7F93B4;text-align:center;line-height:2}
+
+
+@media(max-width:900px){
+body{padding:16px 14px 28px}
+.bar{flex-direction:column;align-items:stretch;gap:14px;margin-bottom:16px}
+.bar h1{font-size:30px}
+.deal{text-align:center;font-size:20px;padding:15px}
+.stage{grid-template-columns:1fr;gap:18px}
+.stage>div:first-child{order:2}
+.stage>.card{order:1}
+.stage>div:last-child{order:3}
+.card{padding:6px;border-radius:15px}
+.hdr{padding:13px 14px 9px;gap:10px}
+.hdr h2{font-size:25px}
+.gem{width:46px;height:46px}
+.gem b{font-size:21px}
+.tags{padding:0 14px 10px}
+.art{margin:0 14px;padding:11px 12px 9px}
+.artlbl{font-size:7px;letter-spacing:.08em}
+.artlbl span:last-child{display:none}
+.fprow em{width:66px;font-size:7.5px}
+.fprow u{width:44px;font-size:8px}
+.axis{margin-left:78px;padding-right:44px;font-size:6.5px}
+.axis span:nth-child(2){display:none}
+.ad div{height:250px!important}
+.typeline{margin:10px 14px 0;font-size:8.5px}
+.rules{margin:11px 14px 0;font-size:13.5px}
+.grid2{grid-template-columns:1fr;margin:12px 14px 0;gap:14px}
+.blk+.blk{padding-top:12px;border-top:1px solid rgba(22,28,40,.15)}
+.st b{width:84px}
+.flavour{margin:11px 14px 0;font-size:12px}
+.foot2{padding:11px 14px;font-size:7.5px;flex-direction:column;gap:3px}
+.acts{flex-direction:row;flex-wrap:wrap;gap:8px}
+.acts a{flex:1 1 46%;font-size:9px;padding:12px 8px}
+.acts .side{flex:1 1 100%;margin-top:6px}
+.tier{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tier div{margin:0;font-size:6.5px;padding:7px 6px}
+.tier b{font-size:12px}
+.ad div{height:250px}
+}
+
+</style>
+</head>
+<body>
+<div class="bar">
+  <div><h1>Today's pull</h1><div class="sub" id="deckline"></div></div>
+  <a class="deal" id="deal" href="#">Deal another card</a>
+</div>
+<div class="stage">
+  <div class="acts">
+    <a class="primary" id="abstract" href="#">Read the abstract</a>
+    <a href="#">Save to my deck</a>
+    <a href="#">Copy citation</a>
+    <a href="#" id="less">Less of this</a>
+    <div class="side" style="margin-top:16px">
+      <h5>Rarity</h5>
+      <div class="tier" id="tier"></div>
+    </div>
+  </div>
+  <div class="card" id="card"></div>
+  <div>
+    <div class="deck">
+      <h5>Your deck</h5>
+      <div class="dk"><span>Cards dealt</span><b id="dealt">&mdash;</b></div>
+      <div class="dk"><span>Kept</span><b id="kept">&mdash;</b></div>
+      <div class="dk"><span>Mythics held</span><b id="mythics">&mdash;</b></div>
+      <div class="dk"><span>Streak</span><b id="streak">&mdash;</b></div>
+    </div>
+    <div class="ad"><span>Advertisement</span><div id="adslot">Ad slot</div></div>
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------------------
+   Replace this object with the JSON your FastAPI endpoint returns.
+   Everything below derives from it - nothing else needs editing.
+   --------------------------------------------------------------- */
+const paper = {
+  title: "Modified-release hydrocortisone versus conventional glucocorticoids in adrenal insufficiency",
+  journal: "Clinical Endocrinology",
+  date: "September 2026",
+  authors: "Abdelsattar, Abdallah, Khaled et al.",
+  doi: "10.1111/cen.70149",
+  pmid: "42050347",
+  url: "https://pubmed.ncbi.nlm.nih.gov/42050347/",
+  specialties: ["Endocrinology", "Internal medicine", "Adrenal disease"],
+  fresh: true,
+  warnings: ["Surrogate outcomes only", "Risk of bias unclear"],
+
+  design: "Systematic review and meta-analysis",   // drives rarity
+  level_of_evidence: "1a",                          // shown in the gem
+
+  summary: [
+    "Six comparative studies covering 400 patients put modified-release hydrocortisone ahead of conventional replacement on most metabolic measures: <b>BMI down 1.1 units, waist circumference down 5 cm</b>, with lower total cholesterol and lower systolic and diastolic blood pressure. Bone agreed, with better lumbar spine and femoral neck T-scores, and there were fewer infections and flu-like events.",
+    "Glucose handling did not separate the two. Neither fasting glucose nor HbA1c differed significantly, though a sensitivity analysis hinted at an HbA1c benefit, and <b>quality of life scores were no different</b> - patients did not feel what the instruments measured."
+  ],
+
+  /* Card art. Omit or set to [] and the art panel is skipped.
+     pos runs 0 (strongly favours intervention) to 100 (strongly favours comparator);
+     50 is the line of no effect. lo/hi are the confidence interval on the same scale. */
+  forest: {
+    caption: "Pooled effects - six studies, 400 patients",
+    rows: [
+      { label: "BMI",             lo: 16, pos: 27, hi: 42, value: "-1.1",  ns: false },
+      { label: "Waist circ.",     lo: 10, pos: 23, hi: 40, value: "-5 cm", ns: false },
+      { label: "Total chol.",     lo: 22, pos: 33, hi: 47, value: "-0.3",  ns: false },
+      { label: "Systolic BP",     lo: 19, pos: 31, hi: 46, value: "-4.2",  ns: false },
+      { label: "Femoral T-score", lo: 24, pos: 35, hi: 48, value: "+0.24", ns: false },
+      { label: "HbA1c",           lo: 36, pos: 47, hi: 66, value: "ns",    ns: true  },
+      { label: "Quality of life", lo: 41, pos: 53, hi: 69, value: "ns",    ns: true  }
+    ],
+    left: "Favours MR-HC", right: "Favours GC"
+  },
+
+  /* Stat block. filled = 0-6 pips. tone: ink | good | warn | bad */
+  stats: [
+    { label: "Studies pooled",    filled: 2, tone: "ink",  value: "6" },
+    { label: "Sample size",       filled: 2, tone: "ink",  value: "400" },
+    { label: "Effect size",       filled: 3, tone: "ink",  value: "Moderate" },
+    { label: "Risk of bias",      filled: 2, tone: "warn", value: "Unclear" },
+    { label: "Level of evidence", filled: 6, tone: "good", value: "1a" },
+    { label: "Outcome type",      filled: 2, tone: "ink",  value: "Surrogate" }
+  ],
+
+  appraisal: {
+    "Population":  "6 comparative studies, n=400 with adrenal insufficiency",
+    "Intervention":"Modified-release hydrocortisone (MR-HC)",
+    "Comparator":  "Conventional glucocorticoid replacement regimens",
+    "Risk of bias":"Not detailed in the abstract; PROSPERO-registered, but no per-study assessment described"
+  },
+  soft_fields: ["Risk of bias"],   // rendered in lighter type
+
+  limitations: "Only six studies and 400 patients, so generalisability is limited. Heterogeneity across designs and populations is not characterised, publication bias and selective reporting go undiscussed, and the quality of individual studies is never assessed in detail. The authors ask for larger, longer trials, and they are right to.",
+
+  rarity_note: "Mythic by design - held back by unclear risk of bias"
+};
+
+const deck = { dealt: "1,204", kept: "37", mythics: "9", streak: "12 days", card_no: "1204" };
+
+/* --- rarity: design decides the tier, nothing else --- */
+const TIERS = [
+  { key: "mythic",   name: "Mythic",   sub: "SR / meta-analysis", cls: "t1",
+    test: d => /systematic review|meta.?analysis/i.test(d) },
+  { key: "rare",     name: "Rare",     sub: "RCT",                cls: "t2",
+    test: d => /randomi[sz]ed|\bRCT\b/i.test(d) },
+  { key: "uncommon", name: "Uncommon", sub: "Cohort",             cls: "t3",
+    test: d => /cohort|case.?control|observational/i.test(d) },
+  { key: "common",   name: "Common",   sub: "Case series",        cls: "t4",
+    test: () => true }
+];
+const tier = TIERS.find(t => t.test(paper.design));
+
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const pipCls = { ink:"f", good:"g", warn:"a", bad:"r" };
+
+function pips(filled, tone){
+  let out = "";
+  for (let i = 0; i < 6; i++) out += `<i class="${i < filled ? pipCls[tone] || "f" : ""}"></i>`;
+  return out;
+}
+
+function forestPanel(f){
+  if (!f || !f.rows || !f.rows.length) return "";
+  const rows = f.rows.map(r => `
+    <div class="fprow${r.ns ? " ns" : ""}">
+      <em>${esc(r.label)}</em>
+      <div class="track">
+        <div class="ci" style="left:${r.lo}%;width:${r.hi - r.lo}%"></div>
+        <div class="dotm" style="left:${r.pos}%"></div>
+      </div>
+      <u>${esc(r.value)}</u>
+    </div>`).join("");
+  return `
+    <div class="art">
+      <div class="artlbl"><span>${esc(f.caption)}</span><span>${esc(f.left)} &#9664;&#9654; ${esc(f.right)}</span></div>
+      <div class="fp">${rows}</div>
+      <div class="axis"><span>${esc(f.left)}</span><span>No difference</span><span>${esc(f.right)}</span></div>
+    </div>`;
+}
+
+function renderCard(p){
+  const tags = [
+    p.fresh ? `<span class="new">Freshly appraised</span>` : "",
+    ...p.specialties.map(s => `<span>${esc(s)}</span>`),
+    ...(p.warnings || []).map(w => `<span class="warnt">${esc(w)}</span>`)
+  ].join("");
+
+  const statRows = p.stats.map(s => `
+    <div class="st"><b>${esc(s.label)}</b><div class="pips">${pips(s.filled, s.tone)}</div><u>${esc(s.value)}</u></div>`).join("");
+
+  const appraisal = Object.entries(p.appraisal).map(([k, v]) => {
+    const soft = (p.soft_fields || []).includes(k) ? ` style="font-weight:400;color:#4A5261"` : "";
+    return `<dt>${esc(k)}</dt><dd${soft}>${esc(v)}</dd>`;
+  }).join("");
+
+  return `
+    <div class="face">
+      <div class="hdr">
+        <h2>${esc(p.title)}</h2>
+        <div class="gem"><b>${esc(p.level_of_evidence)}</b><i>CEBM</i></div>
+      </div>
+      <div class="tags">${tags}</div>
+      ${forestPanel(p.forest)}
+      <div class="typeline"><span>${esc(p.design)} &mdash; ${esc(p.specialties[0] || "")}</span><span>PMID ${esc(p.pmid)}</span></div>
+      <div class="rules">${p.summary.map(x => `<p>${x}</p>`).join("")}</div>
+      <div class="grid2">
+        <div class="blk"><h4>Stat block</h4>${statRows}</div>
+        <div class="blk"><h4>Appraisal</h4><dl class="pico">${appraisal}</dl></div>
+      </div>
+      <div class="flavour"><b>Limitations &mdash; printed on every card</b>"${esc(p.limitations)}"</div>
+      <div class="foot2">
+        <span>${esc(p.journal)} &middot; ${esc(p.date)} &middot; ${esc(p.authors)}</span>
+        <span>DOI ${esc(p.doi)}</span>
+      </div>
+    </div>
+    <div class="rarity">&#9670; ${esc(p.rarity_note || tier.name)} &#9670;</div>`;
+}
+
+document.getElementById("card").innerHTML = renderCard(paper);
+document.getElementById("tier").innerHTML = TIERS.map(t =>
+  `<div class="${t.cls}${t.key === tier.key ? "" : " off"}"><b>${t.name}</b>${t.sub.toUpperCase()}</div>`).join("");
+document.getElementById("deckline").textContent =
+  `CARD ${deck.card_no} \u00B7 ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS \u00B7 APPRAISED ONCE, THEN KEPT`;
+document.getElementById("abstract").href = paper.url;
+document.getElementById("less").textContent = `Less ${paper.specialties[0].toLowerCase()}`;
+dealt.textContent = deck.dealt; kept.textContent = deck.kept;
+mythics.textContent = deck.mythics; streak.textContent = deck.streak;
+document.getElementById("adslot").textContent = "Ad slot \u2014 300 \u00D7 600";
+
+/* Deal another card: point this at your endpoint. */
+document.getElementById("deal").addEventListener("click", e => {
+  e.preventDefault();
+  // fetch('/api/random').then(r => r.json()).then(p => { document.getElementById('card').innerHTML = renderCard(p); });
+  location.reload();
+});
+</script>
+</body>
+</html>

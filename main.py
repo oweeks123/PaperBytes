@@ -533,9 +533,10 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="PaperBytes", lifespan=lifespan)
 
-# Demo UI (plain static HTML/CSS/JS) served same-origin so it can call the API
-# without CORS. Browse it at /ui/. Optional — skipped if the directory is absent.
-_WEB_DIR = Path(__file__).parent / "web"
+# SvelteKit frontend, built (adapter-static, base /ui) to frontend/build and served
+# same-origin so it can call the API without CORS. Browse it at /ui/. Run
+# `npm --prefix frontend run build` to (re)generate it; skipped if absent.
+_WEB_DIR = Path(__file__).parent / "frontend" / "build"
 if _WEB_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=_WEB_DIR, html=True), name="ui")
 

@@ -1,0 +1,35 @@
+/* Design tokens from the Evidence Card mockup. Change these to re-theme. */
+:root {
+  --felt: #0f1b30;
+  --card: #f6f2e6;
+  --ink: #161c28;
+  --muted: #6e7688;
+  --h1: #7be0d6;
+  --h2: #b98cf5;
+  --h3: #f5a8c8;
+  --green: #2e9e7b;
+  --red: #c6473f;
+  --amber: #d9922f;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  max-width: 1440px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: radial-gradient(120% 80% at 50% -10%, #1e3455 0%, var(--felt) 55%, #070f1c 100%);
+  color: #eaf0fa;
+  font-family: 'Archivo', sans-serif;
+  padding: 30px 52px 40px;
+}
+
+@media (max-width: 900px) {
+  body {
+    padding: 16px 14px 28px;
+  }
+}

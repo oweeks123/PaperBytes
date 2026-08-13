@@ -30,11 +30,27 @@ No external services required — storage defaults to a local SQLite file.
    The tables are created automatically on startup (in `paperbytes.db`).
 
 Then browse the interactive docs at `http://localhost:8000/docs`, or open the
-**demo UI at `http://localhost:8000/ui/`** — a plain HTML/CSS/JS page (in `web/`,
-no build step). Its **Home (free tier)** tab shows a single random appraised paper
-(summary, critical-appraisal table, reported statistics, PubMed link, Download-PDF)
-and re-rolls on refresh; the other tabs exercise `/search`, `/articles`, and
-`/specialties`.
+**UI at `http://localhost:8000/ui/`**.
+
+### Frontend (SvelteKit)
+
+The UI is a SvelteKit app in `frontend/` (Svelte 5, `adapter-static`, scoped
+component styles — no Tailwind). The free-tier home is a **trading-card "pull"**:
+one random appraised paper rendered as an evidence card (CEBM gem, tags, stat-block
+pips, PICO appraisal, limitations, PubMed link, Download-PDF), re-dealt on refresh.
+
+```sh
+cd frontend
+npm install
+npm run dev      # Vite dev server (proxies /random, /geo, … to :8000)
+npm run build    # static build -> frontend/build, served by FastAPI at /ui
+```
+
+FastAPI serves `frontend/build` at `/ui` (base path `/ui`, same origin — no CORS).
+`frontend/build` is gitignored, so **run `npm run build` before starting uvicorn**
+if you want the UI served in production. `evidence-card-example.html` is the static
+design mockup the card is based on. (The earlier vanilla UI in `web/` — with the
+registered/paid tier features — is retained for reference pending a SvelteKit port.)
 
 The `/random` and `/fetch` endpoints call Anthropic to generate the summary +
 appraisal (one call per paper, then cached). **Without API credits, set
