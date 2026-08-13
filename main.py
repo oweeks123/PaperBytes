@@ -2,6 +2,7 @@ import datetime as dt
 import logging
 import os
 import random
+import secrets
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -18,7 +19,7 @@ except ImportError:
 import anthropic
 import httpx
 import structlog
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -29,8 +30,10 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     func,
+    or_,
     select,
 )
 from sqlalchemy.orm import (
@@ -170,6 +173,35 @@ class Article(Base):
         }
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    email: Mapped[str] = mapped_column(String, primary_key=True)
+    professional_registration: Mapped[str] = mapped_column(String, nullable=False)
+    # free_registered (default on sign-up) | paid (simulated upgrade)
+    tier: Mapped[str] = mapped_column(String, nullable=False, default="free_registered")
+    # Opaque session token; the client stores it and sends it as a bearer token.
+    # Lightweight (no password) by design — to be hardened later.
+    token: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReadingListItem(Base):
+    __tablename__ = "reading_list"
+    __table_args__ = (UniqueConstraint("user_email", "pubmed_id", name="uq_user_article"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_email: Mapped[str] = mapped_column(
+        ForeignKey("users.email", ondelete="CASCADE"), index=True
+    )
+    pubmed_id: Mapped[str] = mapped_column(
+        ForeignKey("articles.pubmed_id", ondelete="CASCADE"), index=True
+    )
+    reflection: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    added_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ArticleSummary(BaseModel):
     summary: str = Field(description="Conversational summary of up to 200 words (concise, not padded) of the article's aim and key findings")
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
@@ -246,6 +278,86 @@ def get_pubmed_client(cfg: Settings = Depends(get_settings)) -> PubMedClient:
     Tests override this (or ``get_settings``) to inject a mocked transport.
     """
     return PubMedClient(cfg)
+
+
+# --- Auth (lightweight, token-based; no password by design) ----------------
+class RegisterRequest(BaseModel):
+    email: str
+    professional_registration: str = Field(description="e.g. GMC/GDC/NMC registration number")
+
+
+class UserResponse(BaseModel):
+    email: str
+    professional_registration: str
+    tier: str
+    token: str
+
+
+class ReadingListAdd(BaseModel):
+    pubmed_id: str
+    reflection: Optional[str] = None
+
+
+class ReflectionUpdate(BaseModel):
+    reflection: Optional[str] = None
+
+
+class ReadingListItemResponse(BaseModel):
+    pubmed_id: str
+    title: str
+    journal: Optional[str] = None
+    pubmed_url: str
+    summary: str
+    specialties: list[str]
+    appraisal: Optional[CriticalAppraisal] = None
+    reflection: Optional[str] = None
+    added_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+def get_current_user(
+    authorization: Optional[str] = Header(None), db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Resolve the caller from a ``Authorization: Bearer <token>`` header, or None."""
+    if not authorization:
+        return None
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        return None
+    return db.scalar(select(User).where(User.token == token))
+
+
+def require_user(user: Optional[User] = Depends(get_current_user)) -> User:
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    return user
+
+
+def require_paid(user: User = Depends(require_user)) -> User:
+    if user.tier != "paid":
+        raise HTTPException(status_code=403, detail="Paid tier required")
+    return user
+
+
+def _user_response(u: User) -> UserResponse:
+    return UserResponse(
+        email=u.email, professional_registration=u.professional_registration, tier=u.tier, token=u.token
+    )
+
+
+def _reading_item_response(item: ReadingListItem, art: Article) -> ReadingListItemResponse:
+    return ReadingListItemResponse(
+        pubmed_id=art.pubmed_id,
+        title=art.title,
+        journal=art.journal or None,
+        pubmed_url=art.pubmed_url,
+        summary=art.ai_summary,
+        specialties=[s.name for s in art.specialties],
+        appraisal=CriticalAppraisal(**art.appraisal) if art.appraisal else None,
+        reflection=item.reflection,
+        added_at=item.added_at.isoformat() if item.added_at else None,
+        updated_at=item.updated_at.isoformat() if item.updated_at else None,
+    )
 
 
 def summarise(abstract: str) -> ArticleSummary:
@@ -680,6 +792,150 @@ def article_pdf_with_reflection(pubmed_id: str, body: PdfReflection, db: Session
     """Same PDF, but with a practitioner reflection included. The reflection is
     transient — passed at download time and never stored (free registered tier)."""
     return _article_pdf_response(pubmed_id, body.reflection, db)
+
+
+@app.post("/auth/register", response_model=UserResponse)
+def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    """Register (or, idempotently, sign back in) with an email + professional
+    registration. Returns a session token. Lightweight and password-free by
+    design — to be hardened later."""
+    email = body.email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="A valid email is required")
+    reg = body.professional_registration.strip()
+    if not reg:
+        raise HTTPException(status_code=400, detail="A professional registration is required")
+    user = db.get(User, email)
+    if user is None:
+        user = User(
+            email=email,
+            professional_registration=reg,
+            tier="free_registered",
+            token=secrets.token_urlsafe(32),
+            created_at=dt.datetime.now(dt.timezone.utc),
+        )
+        db.add(user)
+    else:
+        user.professional_registration = reg  # returning user: refresh + return token
+    db.commit()
+    return _user_response(user)
+
+
+@app.get("/auth/me", response_model=UserResponse)
+def auth_me(user: User = Depends(require_user)):
+    return _user_response(user)
+
+
+@app.post("/auth/upgrade", response_model=UserResponse)
+def upgrade(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Simulated upgrade to the paid tier (no real payment yet)."""
+    user.tier = "paid"
+    db.commit()
+    return _user_response(user)
+
+
+@app.post("/auth/downgrade", response_model=UserResponse)
+def downgrade(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """Revert to the free registered tier (demo convenience)."""
+    user.tier = "free_registered"
+    db.commit()
+    return _user_response(user)
+
+
+@app.post("/reading-list", response_model=ReadingListItemResponse)
+def add_to_reading_list(
+    body: ReadingListAdd, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    """Add the current article to the paid user's reading list, with an optional
+    stored reflection (updatable later)."""
+    art = db.get(Article, body.pubmed_id)
+    if art is None:
+        raise HTTPException(status_code=404, detail="Article not found — open it first")
+    now = dt.datetime.now(dt.timezone.utc)
+    item = db.scalar(
+        select(ReadingListItem).where(
+            ReadingListItem.user_email == user.email, ReadingListItem.pubmed_id == body.pubmed_id
+        )
+    )
+    if item is None:
+        item = ReadingListItem(
+            user_email=user.email,
+            pubmed_id=body.pubmed_id,
+            reflection=body.reflection,
+            added_at=now,
+            updated_at=now,
+        )
+        db.add(item)
+    else:
+        if body.reflection is not None:
+            item.reflection = body.reflection
+        item.updated_at = now
+    db.commit()
+    return _reading_item_response(item, art)
+
+
+@app.get("/reading-list", response_model=list[ReadingListItemResponse])
+def get_reading_list(
+    q: Optional[str] = Query(None, description="Search title, journal, specialty or reflection"),
+    user: User = Depends(require_paid),
+    db: Session = Depends(get_db),
+):
+    stmt = (
+        select(ReadingListItem, Article)
+        .join(Article, Article.pubmed_id == ReadingListItem.pubmed_id)
+        .where(ReadingListItem.user_email == user.email)
+    )
+    if q:
+        like = f"%{q.strip()}%"
+        spec_match = select(Specialty.pubmed_id).where(Specialty.name.ilike(like))
+        stmt = stmt.where(
+            or_(
+                Article.title.ilike(like),
+                Article.journal.ilike(like),
+                ReadingListItem.reflection.ilike(like),
+                Article.pubmed_id.in_(spec_match),
+            )
+        )
+    stmt = stmt.order_by(ReadingListItem.updated_at.desc())
+    return [_reading_item_response(item, art) for item, art in db.execute(stmt).all()]
+
+
+@app.patch("/reading-list/{pubmed_id}", response_model=ReadingListItemResponse)
+def update_reading_list_reflection(
+    pubmed_id: str,
+    body: ReflectionUpdate,
+    user: User = Depends(require_paid),
+    db: Session = Depends(get_db),
+):
+    item = db.scalar(
+        select(ReadingListItem).where(
+            ReadingListItem.user_email == user.email, ReadingListItem.pubmed_id == pubmed_id
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Not in your reading list")
+    item.reflection = body.reflection
+    item.updated_at = dt.datetime.now(dt.timezone.utc)
+    db.commit()
+    art = db.get(Article, pubmed_id)
+    if art is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return _reading_item_response(item, art)
+
+
+@app.delete("/reading-list/{pubmed_id}")
+def remove_from_reading_list(
+    pubmed_id: str, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    item = db.scalar(
+        select(ReadingListItem).where(
+            ReadingListItem.user_email == user.email, ReadingListItem.pubmed_id == pubmed_id
+        )
+    )
+    if item is not None:
+        db.delete(item)
+        db.commit()
+    return {"status": "removed", "pubmed_id": pubmed_id}
 
 
 @app.get("/articles")

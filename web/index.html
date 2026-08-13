@@ -14,11 +14,7 @@
     </div>
     <div class="topbar-right">
       <span id="geo" class="geo" title="Detected from your IP">🏳 …</span>
-      <select id="tier-select" class="tier-select" title="Access tier">
-        <option value="free">Free</option>
-        <option value="free_registered">Free — registered practitioner</option>
-        <option value="paid">Paid — registered practitioner</option>
-      </select>
+      <div id="account" class="account"></div>
       <div id="health" class="health" title="GET /">checking…</div>
     </div>
   </header>
@@ -28,6 +24,7 @@
     <button class="tab" data-tab="search" role="tab">Search PubMed</button>
     <button class="tab" data-tab="stored" role="tab">Stored articles</button>
     <button class="tab" data-tab="specialties" role="tab">Specialties</button>
+    <button class="tab reading-tab" data-tab="reading" role="tab" hidden>Reading list</button>
   </nav>
 
   <main>
@@ -104,7 +101,35 @@
       <div id="specialties-meta" class="meta"></div>
       <div id="specialties-results" class="chips"></div>
     </section>
+
+    <!-- ───────────── Reading list (paid tier; /reading-list) ───────────── -->
+    <section id="tab-reading" class="tabpane">
+      <form id="reading-form" class="controls">
+        <label>Search
+          <input type="text" name="q" id="reading-search" placeholder="title, journal, specialty, reflection" />
+        </label>
+        <button type="submit" class="btn">Search</button>
+      </form>
+      <div id="reading-meta" class="meta"></div>
+      <div id="reading-results" class="results"></div>
+    </section>
   </main>
+
+  <!-- ───────────── Register / sign-in modal ───────────── -->
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Register / sign in</h3>
+      <p class="modal-note">Registered practitioners unlock pharma / POM content and reflections.
+        Lightweight demo — no password; signing in with the same email restores your account.</p>
+      <label>Email<input type="email" id="auth-email" placeholder="you@nhs.uk" /></label>
+      <label>Professional registration<input type="text" id="auth-reg" placeholder="e.g. GMC 1234567" /></label>
+      <div id="auth-error" class="auth-error"></div>
+      <div class="modal-actions">
+        <button class="btn" id="auth-submit">Register / sign in</button>
+        <button class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="foot">
     Served by the FastAPI app at <code>/ui</code>. Endpoints:

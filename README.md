@@ -94,6 +94,13 @@ A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatic
 | `GET` | `/random` | Free-tier home feed: a random article from the past N days (default 30) with an AI summary + critical-appraisal table. Analyses each paper once, then caches |
 | `GET` | `/articles/{pubmed_id}/summary.pdf` | Portfolio PDF of a stored article's summary + appraisal |
 | `POST` | `/articles/{pubmed_id}/summary.pdf` | Same PDF, with an optional (transient, unstored) practitioner reflection in the body |
+| `POST` | `/auth/register` | Register/sign in with email + professional registration; returns a session token (lightweight, no password) |
+| `GET` | `/auth/me` | Current user (from `Authorization: Bearer <token>`) |
+| `POST` | `/auth/upgrade` · `/auth/downgrade` | Simulated switch between paid and free-registered tiers |
+| `POST` | `/reading-list` | (Paid) add an article with an optional stored reflection |
+| `GET` | `/reading-list?q=` | (Paid) list/search the reading list (title, journal, specialty, reflection) |
+| `PATCH` | `/reading-list/{pubmed_id}` | (Paid) update the stored reflection |
+| `DELETE` | `/reading-list/{pubmed_id}` | (Paid) remove from the reading list |
 | `GET` | `/search` | Live retrieval preview (query params). Does not summarise or store. Returns the resolved NCBI term |
 | `POST` | `/search` | Same, taking a full `SearchFilters` body (custom pub-types, MeSH terms, `extra_terms`) |
 | `POST` | `/fetch` | Kick off a background fetch+summarise+store pass |
@@ -154,10 +161,12 @@ is gated by country + tier — **UK rules first**:
   switcher) full pharma / POM advertising in the UK; an optional **reflection** can be
   added to the downloaded PDF but is **not stored** (discarded on refresh).
 - **Paid registered practitioner** — pharma / POM advertising, plus a searchable
-  **reading list** with a stored, updatable reflection. *(Not yet built — needs real
-  accounts; see below.)*
+  **reading list**: "add to reading list" stores the article with a reflection that
+  is updatable and included in the PDF.
 
-Real registration/login and the paid reading list are the next phase.
+Auth is lightweight and token-based (email + professional registration, no password
+yet — to be hardened). The paid tier is unlocked by a **simulated upgrade** (no real
+payment yet). Sign-in state persists in the browser via the session token.
 
 ## Notes
 

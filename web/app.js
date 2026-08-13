@@ -4,16 +4,34 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+let token = localStorage.getItem("pb_token") || null;
+function authHeaders() {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /** GET a JSON endpoint with query params. Throws on non-2xx with the detail. */
 async function apiGet(path, params = {}) {
   const qs = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== "" && v !== null && v !== undefined)
   );
   const url = qs.toString() ? `${path}?${qs}` : path;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders() });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
   return body;
+}
+
+/** Non-GET JSON request (POST/PATCH/DELETE) with auth + optional body. */
+async function api(method, path, body) {
+  const opts = { method, headers: { ...authHeaders() } };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
 }
 
 const esc = (s) =>
@@ -37,12 +55,14 @@ $$(".tab").forEach((tab) =>
     $$(".tab").forEach((t) => t.classList.toggle("is-active", t === tab));
     const name = tab.dataset.tab;
     $$(".tabpane").forEach((p) => p.classList.toggle("is-active", p.id === `tab-${name}`));
+    if (name === "reading") loadReadingList($("#reading-search").value.trim());
   })
 );
 
 /* ------------------------------------------------- geo / tier / ads --- */
 let geoInfo = null;
-let currentTier = "free"; // free | free_registered | paid — set by the switcher
+let user = null; // logged-in practitioner (or null)
+let currentTier = "free"; // derived: user.tier when logged in, else "free"
 let lastArticle = null;
 
 async function loadGeo() {
@@ -82,19 +102,116 @@ function updateTierNote() {
   if (n) n.textContent = currentTier === "free" ? "" : "Demo: registration simulated (real sign-up in the next phase).";
 }
 
-$("#tier-select").addEventListener("change", (e) => {
-  currentTier = e.target.value;
+/* ---- account / session ---- */
+function tierLabel(t) {
+  return t === "paid" ? "Paid" : t === "free_registered" ? "Free (registered)" : "Free";
+}
+
+function openTabFromHash() {
+  const name = location.hash.replace("#", "");
+  const tab = name && document.querySelector(`.tab[data-tab="${name}"]`);
+  if (tab && !tab.hidden) tab.click();
+}
+
+function afterAuthChange() {
+  currentTier = user ? user.tier : "free";
+  renderAccount();
   updateAds();
   updateTierNote();
+  toggleReadingTab();
   if (lastArticle) $("#home-article").innerHTML = renderHomeArticle(lastArticle);
-});
+  openTabFromHash();
+}
 
-async function downloadPdf(pmid) {
-  const ta = document.getElementById("reflection-input");
-  const reflection = ta ? ta.value : null;
+function setSession(u) {
+  user = u;
+  token = u.token;
+  localStorage.setItem("pb_token", token);
+  afterAuthChange();
+}
+
+function clearSession() {
+  user = null;
+  token = null;
+  localStorage.removeItem("pb_token");
+  afterAuthChange();
+}
+
+async function restoreSession() {
+  if (!token) return afterAuthChange();
+  try {
+    user = await apiGet("/auth/me");
+  } catch {
+    token = null;
+    localStorage.removeItem("pb_token");
+  }
+  afterAuthChange();
+}
+
+function renderAccount() {
+  const el = $("#account");
+  if (!el) return;
+  if (!user) {
+    el.innerHTML = `<button class="btn ghost small" id="acct-open">Register / sign in</button>`;
+    $("#acct-open").onclick = openAuthModal;
+    return;
+  }
+  const upgrade = user.tier === "free_registered" ? `<button class="btn small" id="acct-upgrade">Upgrade to paid</button>` : "";
+  const downgrade = user.tier === "paid" ? `<button class="btn ghost small" id="acct-downgrade">Downgrade</button>` : "";
+  el.innerHTML =
+    `<span class="acct-email" title="${esc(user.email)}">${esc(user.email)}</span>` +
+    `<span class="acct-tier ${esc(user.tier)}">${tierLabel(user.tier)}</span>` +
+    upgrade + downgrade +
+    `<button class="btn ghost small" id="acct-signout">Sign out</button>`;
+  const up = $("#acct-upgrade");
+  if (up) up.onclick = async () => setSession(await api("POST", "/auth/upgrade"));
+  const dn = $("#acct-downgrade");
+  if (dn) dn.onclick = async () => setSession(await api("POST", "/auth/downgrade"));
+  $("#acct-signout").onclick = clearSession;
+}
+
+/* ---- auth modal ---- */
+function openAuthModal() {
+  $("#auth-error").textContent = "";
+  $("#auth-modal").hidden = false;
+  $("#auth-email").focus();
+}
+function closeAuthModal() {
+  $("#auth-modal").hidden = true;
+}
+$("#auth-cancel").onclick = closeAuthModal;
+$("#auth-modal").addEventListener("click", (e) => {
+  if (e.target.id === "auth-modal") closeAuthModal();
+});
+$("#auth-submit").onclick = async () => {
+  const email = $("#auth-email").value.trim();
+  const professional_registration = $("#auth-reg").value.trim();
+  const err = $("#auth-error");
+  err.textContent = "";
+  try {
+    const u = await api("POST", "/auth/register", { email, professional_registration });
+    closeAuthModal();
+    setSession(u);
+  } catch (e) {
+    err.textContent = e.message;
+  }
+};
+
+/* ---- reading-list tab visibility ---- */
+function toggleReadingTab() {
+  const tab = document.querySelector('.tab[data-tab="reading"]');
+  if (!tab) return;
+  const paid = currentTier === "paid";
+  tab.hidden = !paid;
+  if (!paid && tab.classList.contains("is-active")) {
+    document.querySelector('.tab[data-tab="home"]').click();
+  }
+}
+
+async function downloadPdfWith(pmid, reflection) {
   const res = await fetch(`/articles/${encodeURIComponent(pmid)}/summary.pdf`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ reflection }),
   });
   if (!res.ok) {
@@ -110,7 +227,96 @@ async function downloadPdf(pmid) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+async function downloadPdf(pmid) {
+  const ta = document.getElementById("reflection-input");
+  return downloadPdfWith(pmid, ta ? ta.value : null);
+}
 window.downloadPdf = downloadPdf;
+
+/* ---- paid: add-to-reading-list + reading-list tab ---- */
+async function addToReadingList(pmid) {
+  const ta = document.getElementById("reflection-input");
+  try {
+    await api("POST", "/reading-list", { pubmed_id: pmid, reflection: ta ? ta.value : null });
+    const btn = document.getElementById("add-list-btn");
+    if (btn) {
+      btn.textContent = "✓ Added to reading list";
+      btn.disabled = true;
+    }
+  } catch (err) {
+    alert("Could not add: " + err.message);
+  }
+}
+window.addToReadingList = addToReadingList;
+
+function readingCard(it) {
+  const meta = [it.journal && `<b>${esc(it.journal)}</b>`, `PMID ${esc(it.pubmed_id)}`, it.updated_at ? `updated ${esc(it.updated_at.slice(0, 10))}` : null]
+    .filter(Boolean).join(" · ");
+  return `<article class="card">
+    <h3><a href="${esc(it.pubmed_url)}" target="_blank" rel="noreferrer">${esc(it.title)}</a></h3>
+    <div class="sub">${meta}</div>
+    <div class="summary">${esc(it.summary)}</div>
+    <div class="reflection">
+      <label>Your reflection <span class="muted">(stored)</span></label>
+      <textarea class="reflist-input" data-pmid="${esc(it.pubmed_id)}">${esc(it.reflection || "")}</textarea>
+    </div>
+    <div class="home-actions">
+      <button class="btn small" onclick="saveReflection('${esc(it.pubmed_id)}')">Save reflection</button>
+      <button class="btn ghost small" onclick="downloadReadingPdf('${esc(it.pubmed_id)}')">⬇ PDF</button>
+      <button class="btn ghost small danger" onclick="removeReading('${esc(it.pubmed_id)}')">Remove</button>
+    </div>
+  </article>`;
+}
+
+async function loadReadingList(q) {
+  const meta = $("#reading-meta");
+  const out = $("#reading-results");
+  meta.className = "meta";
+  meta.textContent = "Loading…";
+  out.innerHTML = "";
+  try {
+    const items = await apiGet("/reading-list", q ? { q } : {});
+    meta.textContent = `${items.length} item${items.length === 1 ? "" : "s"}${q ? ` matching “${esc(q)}”` : ""}.`;
+    out.innerHTML = items.length
+      ? items.map(readingCard).join("")
+      : `<div class="empty">Nothing saved yet. Open a paper on Home and click “Add to reading list”.</div>`;
+  } catch (err) {
+    meta.className = "meta err";
+    meta.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function saveReflection(pmid) {
+  const ta = document.querySelector(`.reflist-input[data-pmid="${pmid}"]`);
+  if (!ta) return;
+  try {
+    await api("PATCH", `/reading-list/${encodeURIComponent(pmid)}`, { reflection: ta.value });
+    ta.classList.add("saved");
+    setTimeout(() => ta.classList.remove("saved"), 1200);
+  } catch (err) {
+    alert("Could not save: " + err.message);
+  }
+}
+async function downloadReadingPdf(pmid) {
+  const ta = document.querySelector(`.reflist-input[data-pmid="${pmid}"]`);
+  return downloadPdfWith(pmid, ta ? ta.value : null);
+}
+async function removeReading(pmid) {
+  try {
+    await api("DELETE", `/reading-list/${encodeURIComponent(pmid)}`);
+    loadReadingList($("#reading-search").value.trim());
+  } catch (err) {
+    alert("Could not remove: " + err.message);
+  }
+}
+window.saveReflection = saveReflection;
+window.downloadReadingPdf = downloadReadingPdf;
+window.removeReading = removeReading;
+
+$("#reading-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  loadReadingList($("#reading-search").value.trim());
+});
 
 /* -------------------------------------------------------------- health --- */
 async function loadHealth() {
@@ -215,7 +421,7 @@ function renderHomeArticle(a) {
   // paid = will be saved with the reading list (next phase).
   const reflectionNote =
     currentTier === "paid"
-      ? "saved with your reading list (coming next phase)"
+      ? "stored when you add to your reading list; also included in your PDF"
       : "not stored — included in your PDF, discarded on refresh";
   const reflectionBox =
     currentTier === "free"
@@ -233,6 +439,7 @@ function renderHomeArticle(a) {
     ${appraisalTable(a.appraisal)}
     ${reflectionBox}
     <div class="home-actions">
+      ${currentTier === "paid" ? `<button class="btn" id="add-list-btn" onclick="addToReadingList('${esc(a.pmid)}')">★ Add to reading list</button>` : ""}
       <button class="btn" onclick="downloadPdf('${esc(a.pmid)}')">⬇ Download summary (PDF)</button>
       <a class="btn ghost" href="${esc(a.pubmed_url)}" target="_blank" rel="noreferrer">View on PubMed</a>
     </div>
@@ -339,13 +546,7 @@ async function loadSpecialties() {
 $("#specialties-refresh").addEventListener("click", loadSpecialties);
 
 /* ------------------------------------------------------------- startup --- */
-// Optional ?tier= preset (preview a tier without the switcher).
-const _tierParam = new URLSearchParams(location.search).get("tier");
-if (_tierParam && ["free", "free_registered", "paid"].includes(_tierParam)) {
-  currentTier = _tierParam;
-  $("#tier-select").value = _tierParam;
-  updateTierNote();
-}
+restoreSession(); // restore login -> sets tier, account widget, reading tab
 loadHealth();
 loadGeo(); // country flag + ad policy
 loadRandom(); // free-tier home: show a random appraised paper on load

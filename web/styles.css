@@ -57,11 +57,28 @@ code { background: var(--panel-2); padding: 1px 5px; border-radius: 5px; font-si
   background: var(--panel); border: 1px solid var(--border);
   padding: 7px 12px; border-radius: var(--radius); white-space: nowrap;
 }
-.tier-select {
-  background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 7px 10px; font-size: 13px; cursor: pointer;
-}
+/* ---- account widget ---- */
+.account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.acct-email { font-size: 12.5px; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-tier { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+.acct-tier.paid { background: #24402b; color: #9fe0a8; border-color: #2f5b39; }
+.acct-tier.free_registered { background: #23303c; color: #9fd0ff; border-color: var(--accent-weak); }
+.btn.small { padding: 6px 11px; font-size: 12.5px; }
+.btn.danger { color: #ffb0b0; border-color: #5b2f2f; }
+.btn.danger:hover { background: #3a2020; }
+
+/* ---- modal ---- */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal[hidden] { display: none; }
+.modal-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: min(420px, 92vw); }
+.modal-card h3 { margin: 0 0 6px; }
+.modal-note { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+.modal-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.modal-card label input { display: block; width: 100%; margin-top: 5px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 14px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+.auth-error { color: var(--danger); font-size: 12.5px; min-height: 16px; margin-bottom: 4px; }
+.reflist-input.saved { border-color: #6cbf6c; }
+.reflabel, .reflection label { }
 
 /* ---- advertising slot ---- */
 .ad-slot {
