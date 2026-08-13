@@ -16,8 +16,9 @@ except ImportError:
     pass
 
 import anthropic
+import httpx
 import structlog
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -41,6 +42,7 @@ from sqlalchemy.orm import (
     sessionmaker,
 )
 
+from paperbytes import geo
 from paperbytes.config import Settings, get_settings
 from paperbytes.pdf import build_summary_pdf
 from paperbytes.pubmed import filters
@@ -438,6 +440,31 @@ def health():
     }
 
 
+@app.get("/geo")
+async def geo_lookup(
+    request: Request,
+    country: Optional[str] = Query(None, description="Override the detected country (ISO-2), for testing"),
+):
+    """Resolve the client's country from their IP (localhost falls back to GB).
+    The country drives the advertising structure — UK rules first. Pass
+    ``?country=US`` etc. to preview other countries locally."""
+    xff = request.headers.get("x-forwarded-for")
+    ip = geo.client_ip(xff, request.client.host if request.client else None)
+    if country:
+        cc = country.strip().upper()
+        name = cc
+    else:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            cc, name = await geo.lookup_country(ip, client=client)
+    return {
+        "ip": ip,
+        "country_code": cc,
+        "country_name": name,
+        "flag": geo.flag_emoji(cc),
+        "ad_policy": geo.ad_policy(cc),
+    }
+
+
 @app.get("/search", response_model=SearchResponse)
 async def search_preview(
     days_back: int = Query(settings.lookback_days, ge=0, description="Search the previous N days. Defaults to LOOKBACK_DAYS (7)."),
@@ -617,23 +644,42 @@ async def random_article(
     return _random_response(article, cached=False)
 
 
-@app.get("/articles/{pubmed_id}/summary.pdf")
-def article_pdf(pubmed_id: str, db: Session = Depends(get_db)):
-    """Download a portfolio PDF of the summary + critical appraisal for a stored,
-    already-analysed article."""
+class PdfReflection(BaseModel):
+    reflection: Optional[str] = Field(default=None, description="Optional practitioner reflection to include in the PDF (not stored)")
+
+
+def _article_pdf_response(pubmed_id: str, reflection: Optional[str], db: Session) -> Response:
     a = db.get(Article, pubmed_id)
     if a is None or not a.appraisal:
         raise HTTPException(
             status_code=404,
             detail="No stored appraisal for this article — open it via /random first.",
         )
-    pdf = build_summary_pdf(a.to_dict() | {"pmid": a.pubmed_id, "summary": a.ai_summary,
-                                           "specialties": [s.name for s in a.specialties]})
+    data = a.to_dict() | {
+        "pmid": a.pubmed_id,
+        "summary": a.ai_summary,
+        "specialties": [s.name for s in a.specialties],
+        "reflection": reflection,
+    }
     return Response(
-        content=pdf,
+        content=build_summary_pdf(data),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="paperbytes-{pubmed_id}.pdf"'},
     )
+
+
+@app.get("/articles/{pubmed_id}/summary.pdf")
+def article_pdf(pubmed_id: str, db: Session = Depends(get_db)):
+    """Download a portfolio PDF of the summary + critical appraisal for a stored,
+    already-analysed article."""
+    return _article_pdf_response(pubmed_id, None, db)
+
+
+@app.post("/articles/{pubmed_id}/summary.pdf")
+def article_pdf_with_reflection(pubmed_id: str, body: PdfReflection, db: Session = Depends(get_db)):
+    """Same PDF, but with a practitioner reflection included. The reflection is
+    transient — passed at download time and never stored (free registered tier)."""
+    return _article_pdf_response(pubmed_id, body.reflection, db)
 
 
 @app.get("/articles")

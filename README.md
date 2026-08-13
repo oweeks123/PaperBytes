@@ -90,8 +90,10 @@ A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatic
 | Method | Path | What it does |
 |---|---|---|
 | `GET` | `/` | Health + config (model, NCBI key configured, rate limit, mock flag) |
+| `GET` | `/geo` | Resolve the client's country from their IP (localhost → GB). Drives country-gated advertising rules. `?country=XX` overrides for testing |
 | `GET` | `/random` | Free-tier home feed: a random article from the past N days (default 30) with an AI summary + critical-appraisal table. Analyses each paper once, then caches |
 | `GET` | `/articles/{pubmed_id}/summary.pdf` | Portfolio PDF of a stored article's summary + appraisal |
+| `POST` | `/articles/{pubmed_id}/summary.pdf` | Same PDF, with an optional (transient, unstored) practitioner reflection in the body |
 | `GET` | `/search` | Live retrieval preview (query params). Does not summarise or store. Returns the resolved NCBI term |
 | `POST` | `/search` | Same, taking a full `SearchFilters` body (custom pub-types, MeSH terms, `extra_terms`) |
 | `POST` | `/fetch` | Kick off a background fetch+summarise+store pass |
@@ -141,6 +143,21 @@ pytest            # unit + parser (fixtures) + client (respx) tests; no network
 mypy              # strict type-check of the paperbytes/ package
 ruff check paperbytes/
 ```
+
+## Tiers & advertising (in progress)
+
+The UI shows a country flag (top-right, from `/geo`) and a tier switcher. Advertising
+is gated by country + tier — **UK rules first**:
+
+- **Free** — random appraised articles, generic Google AdSense slot (placeholder).
+- **Free registered practitioner** — (registration is currently simulated by the
+  switcher) full pharma / POM advertising in the UK; an optional **reflection** can be
+  added to the downloaded PDF but is **not stored** (discarded on refresh).
+- **Paid registered practitioner** — pharma / POM advertising, plus a searchable
+  **reading list** with a stored, updatable reflection. *(Not yet built — needs real
+  accounts; see below.)*
+
+Real registration/login and the paid reading list are the next phase.
 
 ## Notes
 

@@ -40,6 +40,78 @@ $$(".tab").forEach((tab) =>
   })
 );
 
+/* ------------------------------------------------- geo / tier / ads --- */
+let geoInfo = null;
+let currentTier = "free"; // free | free_registered | paid — set by the switcher
+let lastArticle = null;
+
+async function loadGeo() {
+  const el = $("#geo");
+  try {
+    // ?country=US in the page URL previews another country locally.
+    const override = new URLSearchParams(location.search).get("country");
+    geoInfo = await apiGet("/geo", override ? { country: override } : {});
+    el.textContent = `${geoInfo.flag} ${geoInfo.country_name}`;
+    el.title = `Detected from IP ${geoInfo.ip} · ad policy: ${geoInfo.ad_policy}`;
+  } catch {
+    el.textContent = "🏳 unknown";
+  }
+  updateAds();
+}
+
+function updateAds() {
+  const slot = $("#ad-slot");
+  if (!slot) return;
+  const registered = currentTier !== "free";
+  const uk = geoInfo && geoInfo.ad_policy === "uk";
+  if (registered && uk) {
+    slot.className = "ad-slot pharma";
+    slot.innerHTML =
+      `<span class="ad-label">Advertisement · Pharma / POM — ${esc(geoInfo.country_name)} (placeholder)</span>` +
+      `<div class="ad-body">Prescription-only medication advertising slot — registered practitioners, UK rules.</div>`;
+  } else {
+    slot.className = "ad-slot adsense";
+    slot.innerHTML =
+      `<span class="ad-label">Advertisement · Google AdSense (placeholder)</span>` +
+      `<div class="ad-body">Generic advertising slot.</div>`;
+  }
+}
+
+function updateTierNote() {
+  const n = $("#tier-note");
+  if (n) n.textContent = currentTier === "free" ? "" : "Demo: registration simulated (real sign-up in the next phase).";
+}
+
+$("#tier-select").addEventListener("change", (e) => {
+  currentTier = e.target.value;
+  updateAds();
+  updateTierNote();
+  if (lastArticle) $("#home-article").innerHTML = renderHomeArticle(lastArticle);
+});
+
+async function downloadPdf(pmid) {
+  const ta = document.getElementById("reflection-input");
+  const reflection = ta ? ta.value : null;
+  const res = await fetch(`/articles/${encodeURIComponent(pmid)}/summary.pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reflection }),
+  });
+  if (!res.ok) {
+    alert("Could not generate the PDF.");
+    return;
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `paperbytes-${pmid}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+window.downloadPdf = downloadPdf;
+
 /* -------------------------------------------------------------- health --- */
 async function loadHealth() {
   const el = $("#health");
@@ -139,14 +211,29 @@ function renderHomeArticle(a) {
   const mockBadge = a.mock ? `<span class="badge mock">MOCK — add AI credits for real appraisal</span>` : "";
   const specs = (a.specialties || []).map((s) => `<span class="tag pt">${esc(s)}</span>`).join("");
 
+  // Reflection box: registered tiers only. Free-registered = transient (PDF only);
+  // paid = will be saved with the reading list (next phase).
+  const reflectionNote =
+    currentTier === "paid"
+      ? "saved with your reading list (coming next phase)"
+      : "not stored — included in your PDF, discarded on refresh";
+  const reflectionBox =
+    currentTier === "free"
+      ? ""
+      : `<div class="reflection">
+           <label for="reflection-input">Your reflection <span class="muted">(${reflectionNote})</span></label>
+           <textarea id="reflection-input" placeholder="Add a reflection to include in the PDF…"></textarea>
+         </div>`;
+
   return `<article class="card home-card">
     <div class="home-badges">${mockBadge}${badge}${specs}</div>
     <h2><a href="${esc(a.pubmed_url)}" target="_blank" rel="noreferrer">${esc(a.title)}</a></h2>
     <div class="sub">${meta} · PMID ${esc(a.pmid)}</div>
     <div class="summary">${esc(a.summary)}</div>
     ${appraisalTable(a.appraisal)}
+    ${reflectionBox}
     <div class="home-actions">
-      <a class="btn" href="/articles/${encodeURIComponent(a.pmid)}/summary.pdf">⬇ Download summary (PDF)</a>
+      <button class="btn" onclick="downloadPdf('${esc(a.pmid)}')">⬇ Download summary (PDF)</button>
       <a class="btn ghost" href="${esc(a.pubmed_url)}" target="_blank" rel="noreferrer">View on PubMed</a>
     </div>
   </article>`;
@@ -159,6 +246,7 @@ async function loadRandom() {
   out.innerHTML = `<div class="spin">Fetching a random paper… new papers are AI-appraised on the fly (a few seconds); seen papers are instant.</div>`;
   try {
     const a = await apiGet("/random", { days_back: 30 });
+    lastArticle = a;
     out.innerHTML = renderHomeArticle(a);
   } catch (err) {
     out.innerHTML = `<div class="meta err">Error: ${esc(err.message)}</div>`;
@@ -251,5 +339,13 @@ async function loadSpecialties() {
 $("#specialties-refresh").addEventListener("click", loadSpecialties);
 
 /* ------------------------------------------------------------- startup --- */
+// Optional ?tier= preset (preview a tier without the switcher).
+const _tierParam = new URLSearchParams(location.search).get("tier");
+if (_tierParam && ["free", "free_registered", "paid"].includes(_tierParam)) {
+  currentTier = _tierParam;
+  $("#tier-select").value = _tierParam;
+  updateTierNote();
+}
 loadHealth();
+loadGeo(); // country flag + ad policy
 loadRandom(); // free-tier home: show a random appraised paper on load

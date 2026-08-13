@@ -49,6 +49,13 @@ def test_build_summary_pdf_without_outcomes():
     assert build_summary_pdf(data)[:5] == b"%PDF-"
 
 
+def test_build_summary_pdf_includes_reflection():
+    without = build_summary_pdf(SAMPLE)
+    with_ref = build_summary_pdf({**SAMPLE, "reflection": "My CPD reflection on this paper."})
+    assert with_ref[:5] == b"%PDF-"
+    assert len(with_ref) > len(without)  # reflection section adds content
+
+
 def test_build_summary_pdf_missing_optional_fields():
     # No journal/authors/doi — should still render.
     data = {

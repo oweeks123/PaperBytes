@@ -12,7 +12,15 @@
       <h1>Paper<span>Bytes</span></h1>
       <p class="tagline">PubMed clinical digest — API demo</p>
     </div>
-    <div id="health" class="health" title="GET /">checking…</div>
+    <div class="topbar-right">
+      <span id="geo" class="geo" title="Detected from your IP">🏳 …</span>
+      <select id="tier-select" class="tier-select" title="Access tier">
+        <option value="free">Free</option>
+        <option value="free_registered">Free — registered practitioner</option>
+        <option value="paid">Paid — registered practitioner</option>
+      </select>
+      <div id="health" class="health" title="GET /">checking…</div>
+    </div>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -25,9 +33,11 @@
   <main>
     <!-- ───────────── Free tier: one random appraised paper (GET /random) ───── -->
     <section id="tab-home" class="tabpane is-active">
+      <div id="ad-slot" class="ad-slot"></div>
       <div class="home-bar">
         <button id="home-next" class="btn">New random article</button>
         <span class="home-hint">One random appraised paper from the last 30 days. Refresh (or click) for another — each paper is AI-appraised once, then cached.</span>
+        <span id="tier-note" class="tier-note"></span>
       </div>
       <div id="home-article" class="home-article"></div>
     </section>

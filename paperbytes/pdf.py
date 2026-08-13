@@ -150,6 +150,13 @@ def build_summary_pdf(data: dict[str, Any]) -> bytes:
         flow.append(Paragraph("Reported statistics", styles["h2"]))
         flow.append(_outcomes_table(outcomes, styles))
 
+    reflection = (data.get("reflection") or "").strip()
+    if reflection:
+        flow.append(Paragraph("Reflection", styles["h2"]))
+        for para in reflection.split("\n"):
+            if para.strip():
+                flow.append(Paragraph(para.strip(), styles["body"]))
+
     flow.append(Spacer(1, 10 * mm))
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     flow.append(
