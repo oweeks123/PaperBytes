@@ -23,6 +23,7 @@ import httpx
 import structlog
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import (
@@ -643,8 +644,7 @@ if _WEB_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=_WEB_DIR, html=True), name="ui")
 
 
-@app.get("/")
-def health():
+def _health_payload() -> dict:
     return {
         "status": "ok",
         "model": settings.claude_model,
@@ -653,6 +653,26 @@ def health():
         "ncbi_rate_limit": settings.ncbi_rate_limit,
         "mock_analysis": settings.mock_analysis,
     }
+
+
+@app.get("/", include_in_schema=False)
+def root(request: Request):
+    """Root path serves two audiences. A browser (Accept: text/html) is redirected
+    to the app at /ui/, so visitors hitting the bare domain land on the card rather
+    than raw JSON. Everything else — platform health checks, curl, API clients —
+    still gets the 200 health/config payload, so the health check stays green
+    without needing a separate path configured on the host. The UI must be built
+    (frontend/build present) for the redirect; otherwise the payload is returned."""
+    accept = request.headers.get("accept", "")
+    if _WEB_DIR.is_dir() and "text/html" in accept:
+        return RedirectResponse(url="/ui/")
+    return _health_payload()
+
+
+@app.get("/healthz")
+def health():
+    """Stable, unambiguous health/config endpoint (always JSON, never redirects)."""
+    return _health_payload()
 
 
 @app.get("/geo")
