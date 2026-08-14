@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Today's pull</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+
+:root{--x:0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{max-width:1440px;margin:0 auto;background:#FFF4E3;color:#2A2340;font-family:'Plus Jakarta Sans',sans-serif;padding:30px 52px 34px}
+.bar1{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+.bar1 h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:40px;letter-spacing:-1.2px;line-height:1;font-weight:800;color:#2A2340}
+.bar1 .sub{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8A7FA6;margin-top:6px}
+.deal{font-family:'Plus Jakarta Sans',sans-serif;font-size:23px;letter-spacing:.07em;background:#FF5F7E;color:#fff;border-radius:16px;font-weight:800;letter-spacing:-.3px;box-shadow:0 6px 0 #D93E5E;padding:14px 30px}
+.stage{display:grid;grid-template-columns:1fr 880px 1fr;gap:30px;align-items:start}
+.card{border-radius:30px;padding:12px;background:#fff;box-shadow:0 18px 40px rgba(42,35,64,.18),inset 0 0 0 3px #2A2340}
+.face{background:#FFFDF7;color:#2A2340;overflow:hidden;border-radius:20px}
+.hdr{display:flex;align-items:flex-start;gap:16px;padding:18px 22px 12px}
+.hdr h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:27px;line-height:1.02;letter-spacing:-.7px;flex:1;font-weight:800;line-height:1.18}
+.gem{width:62px;height:62px;flex:none;border-radius:18px;background:#FFC94D;box-shadow:0 4px 0 #E0A722;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.gem b{font-family:'Plus Jakarta Sans',sans-serif;font-size:27px;color:#3A2E10}
+.gem i{font-family:'JetBrains Mono',monospace;font-size:6.5px;letter-spacing:.1em;font-style:normal;color:#3A2E10;opacity:.75;margin-top:1px}
+.tags{display:flex;gap:7px;padding:0 22px 13px;flex-wrap:wrap}
+.tags span{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:5px 9px;border:2px solid #2A2340;border-radius:20px;color:#2A2340;font-weight:700}
+.tags .new{background:#5BD6A6;border-color:#2A2340;color:#123C2C}
+.artwrap{position:relative;margin:0 22px;border-radius:16px;border:3px solid #2A2340;overflow:hidden}
+.aitag{position:absolute;right:11px;bottom:11px;font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.14em;text-transform:uppercase;padding:5px 8px;border-radius:4px;background:rgba(0,0,0,.32);color:#FFFFFF;backdrop-filter:blur(2px)}
+.typeline{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin:13px 22px 0;padding-bottom:11px;border-bottom:1px solid rgba(42,35,64,.14);color:#7B7192;display:flex;justify-content:space-between}
+.rules{margin:13px 22px 0;font-size:14.5px;line-height:1.6;color:#2A2340}
+.rules b{background:linear-gradient(180deg,transparent 56%,#9BE8FF 56%);font-weight:800}
+h4{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;letter-spacing:.16em;color:#7B7192;margin-bottom:9px;font-weight:800;letter-spacing:.1em;font-size:13px;color:#7B7192}
+table{width:100%;border-collapse:collapse;font-size:13px}
+table th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#7B7192;font-weight:400;padding:7px 10px 7px 0;width:180px;white-space:nowrap}
+table td.bar{padding:7px 14px 7px 0;width:auto}
+table td.bar i{display:inline-block;width:13.5%;height:11px;background:#EAE5F3;margin-right:1.2%;border-radius:6px}
+table td.bar i.on{background:#2A2340}
+table td.bar i.on.g{background:#28B487} table td.bar i.on.w{background:#FF8A3D}
+table td.val{text-align:right;font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;white-space:nowrap;width:170px}
+table tr{border-bottom:1px solid rgba(42,35,64,.14)}
+table tr:last-child{border:0}
+table td.bar i.on{background:#7B5BE8} table th{font-weight:700}
+.sect{margin:16px 22px 0;padding-top:14px;border-top:1px solid rgba(42,35,64,.14)}
+.pico{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;margin-top:2px}
+.pico dt{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:#7B7192;margin-top:8px}
+.pico dd{font-size:13px;line-height:1.45;font-weight:600;margin-top:2px}
+.pico .soft dd{font-weight:400;color:#6B6386}
+.flavour{margin:14px 22px 0;font-size:12.5px;font-style:italic;color:#6B6386;line-height:1.5;border-top:1px dashed rgba(42,35,64,.14);padding-top:11px}
+.flavour b{font-style:normal;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#FF8A3D;display:block;margin-bottom:4px}
+.foot2{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.05em;color:#7B7192;padding:13px 22px}
+.rarity{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.18em;text-align:center;padding:9px;color:#2A2340;font-weight:700}
+.acts{display:flex;flex-direction:column;gap:10px;padding-top:4px}
+.acts a{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;padding:13px 15px;text-align:center;border:2px solid #2A2340;border-radius:14px;color:#2A2340;font-weight:700;background:#fff}
+.acts a.primary{background:#7B5BE8;color:#fff;border-color:#2A2340;box-shadow:0 4px 0 #2A2340}
+.pal{margin-top:20px}
+.pal h5{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.18em;color:#8A7FA6;margin-bottom:9px}
+.pal div{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#8A7FA6}
+.pal span{width:20px;height:20px;border-radius:5px;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.pal b{color:#2A2340;font-weight:400;width:62px}
+.pal i{font-style:normal;opacity:.72}
+.ad{border:2px dashed #C9BFE0;border-radius:18px;padding:12px;text-align:center}
+.ad span{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.2em;color:#8A7FA6}
+.ad div{margin-top:8px;height:520px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;color:#8A7FA6;background:#fff;border-radius:14px}
+.name{font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;letter-spacing:.2em;color:#8A7FA6;margin-bottom:14px}
+
+.deal{text-decoration:none;display:inline-block}
+.artwrap img{border-radius:13px}
+
+@media(max-width:900px){
+  body{padding:16px 14px 30px}
+  .bar1{flex-direction:column;align-items:stretch;gap:12px}
+  .bar1 h1{font-size:30px}
+  .deal{text-align:center;font-size:19px;padding:14px}
+  .stage{grid-template-columns:1fr;gap:18px}
+  .stage>.acts{order:2}
+  .stage>.card{order:1}
+  .stage>div:last-child{order:3}
+  .card{padding:8px;border-radius:22px}
+  .face{border-radius:15px}
+  .hdr{padding:14px 15px 10px;gap:10px}
+  .hdr h2{font-size:22px}
+  .gem{width:48px;height:48px;border-radius:14px}
+  .gem b{font-size:21px}
+  .tags,.artwrap,.typeline,.rules,.sect,.flavour,.foot2{margin-left:15px;margin-right:15px}
+  .tags{padding:0 0 12px}
+  .typeline{font-size:8.5px}
+  .rules{font-size:14px}
+  table th{width:112px;font-size:8.5px;white-space:normal}
+  table td.val{width:88px;font-size:10px}
+  table td.bar i{height:9px}
+  .pico{grid-template-columns:1fr}
+  .foot2{flex-direction:column;gap:4px;font-size:7.5px;padding-left:0;padding-right:0}
+  .acts{flex-direction:row;flex-wrap:wrap}
+  .acts a{flex:1 1 46%;font-size:9px;padding:12px 8px}
+  .acts .pal{flex:1 1 100%}
+  .pal div{display:inline-flex;margin-right:14px}
+  .name{flex:1 1 100%}
+  .aitag{font-size:6.5px;padding:4px 6px;right:8px;bottom:8px}
+  .ad div{height:250px}
+}
+
+</style>
+</head>
+<body>
+
+<div class="bar1">
+  <div><h1 id="brand">Today's pull</h1><div class="sub" id="subline"></div></div>
+  <a class="deal" id="deal" href="#">Deal another card</a>
+</div>
+<div class="stage">
+  <div class="acts">
+    <a class="primary" id="pubmed" href="#">Read on PubMed</a>
+    <a href="#" id="pdf">Download summary (PDF)</a>
+    <div class="pal"><h5>PALETTE</h5>
+      <div><span style="background:#7B5BE8"></span><b>#7B5BE8</b><i>grape</i></div>
+      <div><span style="background:#FF5F7E"></span><b>#FF5F7E</b><i>melon</i></div>
+      <div><span style="background:#5BD6A6"></span><b>#5BD6A6</b><i>mint</i></div>
+      <div><span style="background:#FFC94D"></span><b>#FFC94D</b><i>butter</i></div>
+      <div><span style="background:#9BE8FF"></span><b>#9BE8FF</b><i>sky</i></div>
+      <div><span style="background:#2A2340"></span><b>#2A2340</b><i>ink</i></div>
+    </div>
+  </div>
+  <div class="card" id="card"></div>
+  <div>
+    <div class="ad"><span>ADVERTISEMENT</span><div id="adslot">Ad slot</div></div>
+  </div>
+</div>
+
+<script>
+
+/* Fallback art when no generated image is stored yet. */
+function placeholderArt(){
+  return `<svg viewBox="0 0 560 210" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block">
+    <rect width="560" height="210" fill="#9BE8FF"/>
+    <circle cx="90" cy="60" r="46" fill="#5BD6A6" opacity=".55"/>
+    <circle cx="486" cy="168" r="60" fill="#7B5BE8" opacity=".28"/>
+    <rect x="0" y="168" width="560" height="42" fill="#5BD6A6" opacity=".45"/>
+    <g stroke="#2A2340" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="266" cy="52" r="15" fill="#FFC94D"/>
+      <path d="M266 68 C264 92 268 108 266 126"/>
+      <path d="M266 84 C300 78 330 66 336 92 C341 114 318 122 302 108"/>
+      <path d="M266 88 C238 88 214 78 206 96 C199 112 216 122 230 112"/>
+      <path d="M266 126 C282 146 292 162 288 182"/>
+      <path d="M266 126 C246 142 226 148 218 168 C214 178 222 186 232 182"/>
+      <path d="M288 182 l16 4"/><path d="M232 182 l-16 6"/>
+    </g>
+    <g fill="#FF5F7E"><circle cx="336" cy="92" r="6.5"/><circle cx="206" cy="96" r="6.5"/>
+      <circle cx="288" cy="182" r="6.5"/><circle cx="218" cy="168" r="6.5"/><circle cx="266" cy="126" r="6.5"/></g>
+  </svg>`;
+}
+
+/* ---------------------------------------------------------------
+   Swap this object for the JSON your FastAPI endpoint returns.
+   --------------------------------------------------------------- */
+const paper = {
+  title: "Generalized joint hypermobility in adults: a systematic review with meta-analysis to identify data-driven cut-offs using the Beighton score",
+  journal: "Arthritis Care & Research",
+  date: "August 2026",
+  authors: "Tofts, Pacey, Williams, Welch, Shannon, Chan",
+  doi: "10.1002/acr.70017",
+  pmid: "41399207",
+  url: "https://pubmed.ncbi.nlm.nih.gov/41399207/",
+  design: "Systematic review and meta-analysis",
+  specialties: ["Rheumatology", "Orthopedic surgery", "Physical medicine", "Internal medicine"],
+  fresh: true,
+  level_of_evidence: "1a",
+
+  /* Generated once per PMID, then cached. Leave null and the placeholder is drawn. */
+  image_url: null,
+  image_alt: "Playful flat illustration of a bendy figure, generated from the paper title",
+
+  summary: "Across 46 studies and 23,000 adults, a Beighton score of 6 or more identified generalized joint hypermobility, with an overall prevalence of 2%. The finding that matters is that <b>the cut-off should move with age</b>: 6 or more at 18\u201325, 5 or more at 26\u201365, and 4 or more beyond 65. No meaningful sex difference emerged. Age-stratified thresholds would cut both over- and under-diagnosis.",
+
+  /* filled: 0-6 segments. tone: ink | good | warn */
+  stats: [
+    { label: "Level of evidence",  filled: 6, tone: "good", value: "1a \u00B7 CEBM" },
+    { label: "Study design",       filled: 6, tone: "good", value: "SR / meta-analysis" },
+    { label: "Studies pooled",     filled: 5, tone: "ink",  value: "46" },
+    { label: "Participants",       filled: 5, tone: "ink",  value: "23,000" },
+    { label: "Risk of bias",       filled: 2, tone: "warn", value: "Not reported" },
+    { label: "Heterogeneity",      filled: 2, tone: "warn", value: "High" },
+    { label: "Applicability to UK",filled: 5, tone: "good", value: "Good" }
+  ],
+
+  appraisal: {
+    "Population":   "General adults \u226518 years; 46 studies (n=23,000)",
+    "Intervention": "Beighton score measurement",
+    "Comparator":   "Various GJH cut-off thresholds",
+    "Risk of bias": "Not explicitly reported in the abstract; heterogeneity in populations and methodology"
+  },
+  soft_fields: ["Risk of bias"],
+
+  limitations: "Insufficient data for comprehensive meta-analysis in some subgroups, notably the five-or-more cut-off in adults over 65. Wide confidence intervals suggest high heterogeneity. No explicit assessment of study quality or risk of bias, and variation in methodology across included studies is never detailed.",
+  rarity_note: "Mythic by design \u2014 held back by unreported bias"
+};
+
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const toneCls = { ink: "", good: "g", warn: "w" };
+
+function pips(filled, tone){
+  let out = "";
+  for (let i = 0; i < 6; i++) out += `<i class="${i < filled ? "on " + (toneCls[tone] || "") : ""}"></i>`;
+  return out;
+}
+
+function art(p){
+  const inner = p.image_url
+    ? `<img src="${p.image_url}" alt="${esc(p.image_alt || "")}" style="width:100%;display:block">`
+    : placeholderArt();
+  return `<div class="artwrap">${inner}<div class="aitag">AI illustration &middot; from the title</div></div>`;
+}
+
+function renderCard(p){
+  const tags = [
+    p.fresh ? `<span class="new">Freshly appraised</span>` : "",
+    ...p.specialties.map(s => `<span>${esc(s)}</span>`)
+  ].join("");
+
+  const rows = p.stats.map(s => `
+    <tr>
+      <th>${esc(s.label)}</th>
+      <td class="bar">${pips(s.filled, s.tone)}</td>
+      <td class="val">${s.value}</td>
+    </tr>`).join("");
+
+  const pico = Object.entries(p.appraisal).map(([k, v]) => {
+    const soft = (p.soft_fields || []).includes(k) ? ' class="soft"' : "";
+    return `<div${soft}><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;
+  }).join("");
+
+  return `
+    <div class="face">
+      <div class="hdr">
+        <h2>${esc(p.title)}</h2>
+        <div class="gem"><b>${esc(p.level_of_evidence)}</b><i>CEBM</i></div>
+      </div>
+      <div class="tags">${tags}</div>
+      ${art(p)}
+      <div class="typeline"><span>${esc(p.design)} &mdash; ${esc(p.specialties[0] || "")}</span><span>PMID ${esc(p.pmid)}</span></div>
+      <div class="rules"><p>${p.summary}</p></div>
+      <div class="sect">
+        <h4>Stat block</h4>
+        <table><tbody>${rows}</tbody></table>
+      </div>
+      <div class="sect">
+        <h4>Appraisal</h4>
+        <dl class="pico">${pico}</dl>
+      </div>
+      <div class="flavour"><b>Limitations &mdash; printed on every card</b>&ldquo;${esc(p.limitations)}&rdquo;</div>
+      <div class="foot2">
+        <span>${esc(p.journal).toUpperCase()} &middot; ${esc(p.date).toUpperCase()} &middot; ${esc(p.authors).toUpperCase()}</span>
+        <span>DOI ${esc(p.doi).toUpperCase()}</span>
+      </div>
+    </div>
+    <div class="rarity">&#9733; ${esc(p.rarity_note).toUpperCase()} &#9733;</div>`;
+}
+
+document.getElementById("card").innerHTML = renderCard(paper);
+document.getElementById("pubmed").href = paper.url;
+document.getElementById("subline").textContent =
+  "GB UNITED KINGDOM \u00B7 ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS \u00B7 APPRAISED ONCE, THEN KEPT";
+document.getElementById("adslot").textContent = "Ad slot \u2014 300 \u00D7 600";
+
+document.getElementById("deal").addEventListener("click", e => {
+  e.preventDefault();
+  // fetch('/api/random').then(r => r.json()).then(p => { document.getElementById('card').innerHTML = renderCard(p); });
+  location.reload();
+});
+
+</script>
+</body>
+</html>

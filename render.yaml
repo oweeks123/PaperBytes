@@ -1,0 +1,79 @@
+# Render Blueprint for PaperBytes / "Paper Hero".
+# One Docker web service (FastAPI serves the API and the built SvelteKit UI at /ui)
+# plus a managed Postgres instance for the cache-once store.
+#
+# Deploy: push this to the repo, then in Render choose "New +" → "Blueprint" and
+# point it at this file. Render builds the Dockerfile, provisions the database,
+# and wires DATABASE_URL automatically. Fill the `sync: false` secrets in the
+# dashboard (they are intentionally NOT stored in git).
+#
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: paperbytes
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Free tier spins down after inactivity (cold starts). Move to "starter" for
+    # always-on once you go live.
+    plan: free
+    region: oregon
+    # `/` returns a small health/config JSON — ideal for Render's health checks.
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # --- Storage: durable Postgres, wired from the database below. ---
+      # This is load-bearing: appraisals + illustrations are cached per PMID, so
+      # persistence is what stops every redeploy from re-billing Anthropic/OpenAI.
+      # (The app normalises a postgres:// URL to postgresql:// automatically.)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: paperbytes-db
+          property: connectionString
+
+      # --- Required for the live free-tier card. Set these in the dashboard. ---
+      - key: PUBMED_EMAIL          # NCBI contact email (required by their policy)
+        sync: false
+      - key: ANTHROPIC_API_KEY     # Claude summary + critical appraisal
+        sync: false
+
+      # --- Optional: illustrations. Omit the key → "Your hero is coming!" placeholder. ---
+      - key: OPENAI_API_KEY        # gpt-image-1 card art
+        sync: false
+      - key: IMAGE_QUALITY
+        value: medium              # low | medium | high  (drives per-image cost)
+
+      # --- Optional: raises NCBI rate limit 3 → 10 req/s. Recommended. ---
+      - key: NCBI_API_KEY
+        sync: false
+
+      # --- Optional: contact form delivery. Without SMTP, messages are stored in the DB. ---
+      - key: CONTACT_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+
+      # --- Model / behaviour. ---
+      - key: CLAUDE_MODEL
+        value: claude-haiku-4-5    # switch to a larger model for higher-quality appraisals
+      # Cost guard: deploy first with MOCK_ANALYSIS=1 (and no OPENAI_API_KEY) to
+      # verify the app boots and serves /ui/ without spending anything, then flip to 0.
+      - key: MOCK_ANALYSIS
+        value: "0"
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: paperbytes-db
+    databaseName: paperbytes
+    user: paperbytes
+    # NOTE: Render's free Postgres is deleted ~90 days after creation. Move to a
+    # paid plan before launch so the cache (and any registered-tier data) persists.
+    plan: free
+    region: oregon

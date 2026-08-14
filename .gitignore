@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+
+# Local SQLite database
+*.db
+*.sqlite3
+
+# Local generated artifacts
+*_preview.png
+/summary.pdf
+
+# screenshots / image scratch at backend root (keeps frontend/static pngs)
+/*.png
+/*.jpg
+/*.jpeg

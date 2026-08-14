@@ -1,0 +1,31 @@
+# Keep the build context small and secret-free.
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Python
+**/__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Local data / generated
+*.db
+*.sqlite3
+*.jpg
+*.png
+
+# Frontend (source is copied; deps/build are regenerated in the image)
+frontend/node_modules/
+frontend/build/
+frontend/.svelte-kit/
+
+# Not needed at runtime
+tests/
+docs/
+Dockerfile
+.dockerignore
