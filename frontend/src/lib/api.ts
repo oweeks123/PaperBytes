@@ -15,6 +15,7 @@ export interface Appraisal {
   intervention: string;
   comparator: string;
   outcomes: Outcome[];
+  significance_comment?: string;
   risk_of_bias: string;
   level_of_evidence: string;
   limitations: string;
@@ -57,6 +58,15 @@ export interface AppraisalRow {
   soft: boolean;
 }
 
+export interface StatLine {
+  name: string;
+  measure: string;
+  value: string;
+  ci: string;
+  p: string;
+  sig: 'sig' | 'ns' | '';
+}
+
 export interface CardModel {
   pmid: string;
   title: string;
@@ -72,6 +82,8 @@ export interface CardModel {
   mock: boolean;
   warnings: string[];
   summaryParagraphs: string[];
+  stats: StatLine[];
+  significanceComment: string;
   pips: Pip[];
   appraisalRows: AppraisalRow[];
   limitations: string;
@@ -143,6 +155,24 @@ function shortLevel(level: string): string {
   return trimmed.length <= 4 ? trimmed || '—' : trimmed.slice(0, 3) + '…';
 }
 
+// Conservative significance flag from a reported p-value only (we don't guess from
+// CIs, to avoid mislabelling). Empty when it can't be determined.
+function outcomeSig(p: string | null): 'sig' | 'ns' | '' {
+  if (!p) return '';
+  const s = p.toLowerCase().replace(/\s+/g, '');
+  if (/(^|[^a-z])ns([^a-z]|$)|notsignificant/.test(s)) return 'ns';
+  const lt = s.match(/<(\d*\.?\d+)/);
+  if (lt) return parseFloat(lt[1]) <= 0.05 ? 'sig' : '';
+  const gt = s.match(/>(\d*\.?\d+)/);
+  if (gt) return parseFloat(gt[1]) >= 0.05 ? 'ns' : '';
+  const eq = s.match(/(\d*\.?\d+)/);
+  if (eq) {
+    const v = parseFloat(eq[1]);
+    if (!Number.isNaN(v)) return v < 0.05 ? 'sig' : 'ns';
+  }
+  return '';
+}
+
 function robInfo(rob: string): { filled: number; tone: Tone; value: string; warn: string | null } {
   const r = rob.toLowerCase();
   if (/\blow\b/.test(r)) return { filled: 5, tone: 'good', value: 'Low', warn: null };
@@ -181,6 +211,17 @@ export function toCard(a: RandomArticle): CardModel {
     mock: a.mock,
     warnings,
     summaryParagraphs: a.summary.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean) || [a.summary],
+    stats: ap.outcomes
+      .filter((o) => o.value || o.measure || o.confidence_interval || o.p_value)
+      .map((o) => ({
+        name: o.name,
+        measure: o.measure || '',
+        value: o.value || '',
+        ci: o.confidence_interval || '',
+        p: o.p_value || '',
+        sig: outcomeSig(o.p_value)
+      })),
+    significanceComment: ap.significance_comment || '',
     pips: [
       { label: 'Level of evidence', filled: level.filled, tone: level.tone, value: levelGem },
       { label: 'Study design', filled: rank, tone: rank >= 5 ? 'good' : 'ink', value: shortDesign(ap.study_design || '') },

@@ -47,6 +47,33 @@
       {#each card.summaryParagraphs as p}<p>{p}</p>{/each}
     </div>
 
+    {#if card.stats.length}
+      <div class="sect">
+        <h4>Reported statistics</h4>
+        <div class="nums">
+          {#each card.stats as o}
+            <div class="num">
+              <div class="num-name">{o.name}</div>
+              <div class="num-vals">
+                {#if o.measure}<span class="meas">{o.measure}</span>{/if}
+                {#if o.value}<b>{o.value}</b>{/if}
+                {#if o.ci}<span class="mut">95% CI {o.ci}</span>{/if}
+                {#if o.p}<span class="mut">p {o.p}</span>{/if}
+                {#if o.sig === 'sig'}
+                  <span class="sig sig-y">Significant</span>
+                {:else if o.sig === 'ns'}
+                  <span class="sig sig-n">Not significant</span>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+        {#if card.significanceComment}
+          <div class="sig-comment">{card.significanceComment}</div>
+        {/if}
+      </div>
+    {/if}
+
     <div class="sect">
       <h4>Stat block</h4>
       <table>
@@ -233,6 +260,73 @@
     color: var(--muted);
     margin-bottom: 9px;
     font-weight: 800;
+  }
+
+  /* Reported statistics */
+  .nums {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .num-name {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.3;
+  }
+  .num-vals {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .num-vals b {
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .num-vals .meas {
+    background: var(--seg-off);
+    color: var(--ink);
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .sig {
+    border-radius: 20px;
+    padding: 2px 9px;
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    border: 2px solid;
+  }
+  .sig-y {
+    color: var(--good);
+    border-color: var(--good);
+    background: rgba(40, 180, 135, 0.12);
+  }
+  .sig-n {
+    color: var(--muted);
+    border-color: var(--seg-off);
+    background: var(--seg-off);
+  }
+  .sig-comment {
+    margin-top: 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: #f3f0fb;
+    border-radius: 10px;
+    border-left: 4px solid var(--grape);
+    padding: 9px 12px;
   }
   table {
     width: 100%;

@@ -221,6 +221,10 @@ class CriticalAppraisal(BaseModel):
     intervention: str = Field(description="Intervention or exposure studied")
     comparator: str = Field(description="Comparator or control")
     outcomes: list[Outcome] = Field(description="Every reported outcome with its statistics")
+    significance_comment: str = Field(
+        default="",
+        description="One or two sentences on the statistical significance of the key findings — which reached significance (95% CI excluding the null, or p<0.05) and which did not",
+    )
     risk_of_bias: str = Field(description="Risk of bias / methodological quality")
     level_of_evidence: str = Field(description="Level of evidence, e.g. Oxford CEBM 1b")
     limitations: str = Field(description="Key limitations")
@@ -257,7 +261,9 @@ APPRAISAL_TASK = (
     "(2) the medical specialties it is relevant to; and "
     "(3) a structured critical appraisal — study design, population (with sample size), "
     "intervention, comparator, every reported outcome with its statistics (effect measure, "
-    "point estimate, 95% CI, p-value), risk of bias, level of evidence, and key limitations. "
+    "point estimate, 95% CI, p-value), a brief comment on the statistical significance of the "
+    "key findings (state which reached significance — CI excluding the null or p<0.05 — and "
+    "which did not), risk of bias, level of evidence, and key limitations. "
     "The critical appraisal fields stay precise and clinical — the conversational tone is only "
     "for the summary. Extract statistics verbatim where reported; leave a field blank if the "
     "abstract does not state it. Do not invent numbers."
