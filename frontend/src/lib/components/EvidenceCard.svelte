@@ -114,6 +114,11 @@
       <span>{[card.journal, card.date, card.authors].filter(Boolean).join(' · ').toUpperCase()}</span>
       <span>{#if card.doi}DOI {card.doi.toUpperCase()}{/if}</span>
     </div>
+
+    <div class="caveat">
+      ⚠ AI-generated summary, appraisal &amp; illustration — always verify against the original
+      article before making any clinical decision.
+    </div>
   </div>
 </div>
 
@@ -484,7 +489,17 @@
     font-size: 8.5px;
     letter-spacing: 0.05em;
     color: var(--muted);
-    padding: 13px 22px;
+    padding: 13px 22px 0;
+  }
+  .caveat {
+    margin: 10px 22px 0;
+    padding: 9px 0 14px;
+    border-top: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    line-height: 1.55;
+    letter-spacing: 0.03em;
+    color: var(--muted);
   }
 
   @media (max-width: 900px) {
