@@ -3,10 +3,9 @@
   import { fly } from 'svelte/transition';
   import '../app.css';
   import EvidenceCard from '$lib/components/EvidenceCard.svelte';
-  import { getRandom, getGeo, toCard, downloadPdf, type CardModel, type Geo } from '$lib/api';
+  import { getRandom, toCard, downloadPdf, type CardModel } from '$lib/api';
 
   let card = $state<CardModel | null>(null);
-  let geo = $state<Geo | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let dealing = $state(false);
@@ -35,10 +34,6 @@
   }
 
   onMount(() => {
-    const country = new URLSearchParams(location.search).get('country') ?? undefined;
-    getGeo(country)
-      .then((g) => (geo = g))
-      .catch(() => {});
     deal();
   });
 </script>
@@ -47,8 +42,7 @@
   <div>
     <h1>Paper Hero</h1>
     <div class="sub">
-      {#if geo}{geo.flag} {geo.country_name.toUpperCase()} ·
-      {/if}ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED ONCE, THEN KEPT
+      ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.
     </div>
   </div>
   <button class="deal" onclick={deal} disabled={dealing}>
