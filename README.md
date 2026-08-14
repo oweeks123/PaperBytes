@@ -92,7 +92,7 @@ free API key raises that to 10/s:
 | `ANTHROPIC_API_KEY` | for `/fetch` | — | From console.anthropic.com |
 | `CLAUDE_MODEL` | no | `claude-haiku-4-5` | Try `claude-sonnet-4-6` for higher quality |
 | `OPENAI_API_KEY` | no | — | Enables AI card illustrations (gpt-image-1). Without it, the placeholder art is used |
-| `IMAGE_QUALITY` | no | `low` | gpt-image-1 quality: `low` / `medium` / `high` |
+| `IMAGE_QUALITY` | no | `medium` | gpt-image-1 quality: `low` / `medium` / `high` |
 | `LOOKBACK_DAYS` | no | `7` | Default fetch/search window |
 | `DATABASE_URL` | no | `sqlite:///./paperbytes.db` | Point at Postgres for deployment |
 | `LOG_LEVEL` | no | `INFO` | structlog level |

@@ -124,11 +124,14 @@ def get_openai():
 
 
 IMAGE_PROMPT = (
-    "Minimal, playful, flat vector editorial illustration representing the concept of: "
-    "{topic}. Sticker style — rounded shapes, thick dark outlines, generous negative space. "
+    "A bold, heroic comic-book cover illustration that celebrates the topic below as if it were "
+    "the hero of the story: {topic}. Epic and triumphant — a dramatic low-angle hero shot with a "
+    "radiant halo / light burst behind the central subject, dynamic energy and a sense of "
+    "victory, in the spirit of a superhero trading card. The central subject must clearly and "
+    "literally depict the actual medical/scientific topic itself — NOT a book, document, page, "
+    "clipboard or a generic scientist. Flat vector art, thick dark outlines, clean bold shapes. "
     "Colour palette: purple #7B5BE8, pink #FF5F7E, mint green #5BD6A6, yellow #FFC94D, sky "
-    "blue #9BE8FF, on a light warm background. Friendly, modern, conceptual and tasteful. "
-    "Absolutely no text, no letters, no words, no numbers, no captions."
+    "blue #9BE8FF, on a light warm background. Absolutely no text, no letters, no words, no numbers."
 )
 
 

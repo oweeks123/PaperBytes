@@ -45,7 +45,7 @@
 
 <div class="bar">
   <div>
-    <h1>Today's pull</h1>
+    <h1>Paper Hero</h1>
     <div class="sub">
       {#if geo}{geo.flag} {geo.country_name.toUpperCase()} ·
       {/if}ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED ONCE, THEN KEPT

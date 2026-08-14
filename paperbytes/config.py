@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # --- AI illustration (OpenAI images) -----------------------------------
     # Optional; without a key the card uses the placeholder art.
     openai_api_key: str | None = None
-    image_quality: str = "low"  # low | medium | high (gpt-image-1)
+    image_quality: str = "medium"  # low | medium | high (gpt-image-1)
 
     # --- Fetch window ------------------------------------------------------
     lookback_days: int = 7
