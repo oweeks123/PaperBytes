@@ -77,6 +77,16 @@
   onMount(() => {
     if (location.hash === '#contact') openContact();
     deal();
+    // Request an ad into the AdSense unit. The loader lives in app.html; if it
+    // hasn't finished loading yet, push() queues into the adsbygoogle array and
+    // runs once it does. Wrapped so an ad blocker or failed load can never break
+    // the page — the labelled box just stays empty as a graceful fallback.
+    try {
+      const w = window as unknown as { adsbygoogle?: unknown[] };
+      (w.adsbygoogle = w.adsbygoogle || []).push({});
+    } catch {
+      /* AdSense unavailable — leave the slot empty. */
+    }
   });
 </script>
 
@@ -118,7 +128,14 @@
   <div class="rail">
     <div class="ad">
       <span>Advertisement</span>
-      <div>Ad slot · 300 × 600</div>
+      <ins
+        class="adsbygoogle"
+        style="display:block"
+        data-ad-client="ca-pub-2095036427198725"
+        data-ad-slot="3551146009"
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      ></ins>
     </div>
   </div>
 </div>
@@ -303,16 +320,10 @@
     letter-spacing: 0.2em;
     color: var(--muted-2);
   }
-  .ad div {
+  .ad ins.adsbygoogle {
+    display: block;
     margin-top: 8px;
-    height: 520px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
-    letter-spacing: 0.12em;
-    color: var(--muted-2);
+    min-height: 520px;
     background: #fff;
     border-radius: 14px;
   }
@@ -353,8 +364,8 @@
     .acts .hint {
       flex: 1 1 100%;
     }
-    .ad div {
-      height: 250px;
+    .ad ins.adsbygoogle {
+      min-height: 250px;
     }
   }
 
