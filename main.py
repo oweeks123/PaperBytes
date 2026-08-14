@@ -23,7 +23,7 @@ import httpx
 import structlog
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import (
@@ -673,6 +673,17 @@ def root(request: Request):
 def health():
     """Stable, unambiguous health/config endpoint (always JSON, never redirects)."""
     return _health_payload()
+
+
+# Authorised-sellers declaration for Google AdSense. Must be served as plain text
+# at the domain root (/ads.txt); the fixed f08c… token is Google's certification
+# authority ID for AdSense. See https://support.google.com/adsense/answer/12171612
+ADS_TXT = "google.com, pub-2095036427198725, DIRECT, f08c47fec0942fa0\n"
+
+
+@app.get("/ads.txt", response_class=PlainTextResponse, include_in_schema=False)
+def ads_txt() -> str:
+    return ADS_TXT
 
 
 @app.get("/geo")
