@@ -24,3 +24,5 @@ env/
 
 # screenshots / image scratch at backend root (keeps frontend/static pngs)
 /*.png
+/*.jpg
+/*.jpeg

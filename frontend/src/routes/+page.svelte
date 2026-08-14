@@ -82,7 +82,7 @@
   <div class="rail">
     <div class="ad">
       <span>Advertisement</span>
-      <div>Google AdSense<br />(placeholder)<br />300 × 600</div>
+      <div>Ad slot · 300 × 600</div>
     </div>
   </div>
 </div>
@@ -93,37 +93,42 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 24px;
+    margin-bottom: 22px;
   }
   .bar h1 {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 38px;
-    letter-spacing: 0.05em;
+    font-size: 40px;
+    letter-spacing: -1.2px;
     line-height: 1;
-    color: #eaeff6;
+    font-weight: 800;
+    color: var(--ink);
   }
   .sub {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.14em;
-    color: var(--page-dim);
-    margin-top: 5px;
+    color: var(--muted-2);
+    margin-top: 6px;
   }
   .deal {
-    font-family: 'Bebas Neue', sans-serif;
     font-size: 23px;
-    letter-spacing: 0.07em;
-    background: var(--accent);
-    color: var(--on-accent);
-    padding: 13px 30px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    background: var(--melon);
+    color: #fff;
     border: none;
-    border-radius: 10px;
+    border-radius: 16px;
+    padding: 14px 30px;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 6px 0 var(--melon-shadow);
     white-space: nowrap;
+    transition: transform 0.05s ease, box-shadow 0.05s ease;
   }
   .deal:hover {
-    background: var(--accent-soft);
+    filter: brightness(1.03);
+  }
+  .deal:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 var(--melon-shadow);
   }
   .deal:disabled {
     opacity: 0.6;
@@ -132,16 +137,16 @@
 
   .stage {
     display: grid;
-    grid-template-columns: minmax(160px, 1fr) minmax(0, 780px) minmax(160px, 1fr);
+    grid-template-columns: minmax(170px, 1fr) minmax(0, 880px) minmax(170px, 1fr);
+    gap: 30px;
     align-items: start;
-    gap: 34px;
   }
 
   .acts {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding-top: 6px;
+    padding-top: 4px;
   }
   .acts a,
   .acts button {
@@ -150,51 +155,49 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     text-decoration: none;
-    color: #c4ccd8;
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: 10px;
     padding: 13px 15px;
     text-align: center;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    color: var(--ink);
+    font-weight: 700;
+    background: #fff;
     cursor: pointer;
   }
-  .acts a:hover,
-  .acts button:hover {
-    border-color: var(--accent);
-    color: #eaeff6;
-  }
   .acts a.primary {
-    background: var(--accent);
-    color: var(--on-accent);
-    border-color: var(--accent);
-    font-weight: 700;
+    background: var(--grape);
+    color: #fff;
+    border-color: var(--ink);
+    box-shadow: 0 4px 0 var(--ink);
   }
-  .acts a.primary:hover {
-    background: var(--accent-soft);
-    color: var(--on-accent);
+  .acts a:active,
+  .acts button:active {
+    transform: translateY(2px);
   }
   .acts .hint {
     font-family: 'JetBrains Mono', monospace;
     font-size: 8.5px;
     letter-spacing: 0.06em;
-    color: #6f86aa;
+    color: var(--muted-2);
     line-height: 1.6;
     padding: 4px 2px;
+    text-transform: none;
+    text-align: left;
   }
 
   .cardwrap {
-    min-height: 200px;
+    min-height: 220px;
   }
   .msg {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     letter-spacing: 0.06em;
-    color: #8fa2be;
+    color: var(--muted);
     padding: 40px 0;
     text-align: center;
   }
   .msg.err {
-    color: #d98b83;
+    color: var(--bad);
   }
 
   .rail {
@@ -203,8 +206,8 @@
     gap: 16px;
   }
   .ad {
-    border: 1px dashed #33507a;
-    border-radius: 14px;
+    border: 2px dashed #c9bfe0;
+    border-radius: 18px;
     padding: 12px;
     text-align: center;
   }
@@ -212,38 +215,35 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 8px;
     letter-spacing: 0.2em;
-    color: #6f86aa;
+    color: var(--muted-2);
   }
   .ad div {
     margin-top: 8px;
     height: 520px;
-    border-radius: 9px;
-    background: rgba(255, 255, 255, 0.04);
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: 'JetBrains Mono', monospace;
     font-size: 9.5px;
     letter-spacing: 0.12em;
-    color: #7f93b4;
-    text-align: center;
-    line-height: 2;
+    color: var(--muted-2);
+    background: #fff;
+    border-radius: 14px;
   }
 
   @media (max-width: 900px) {
     .bar {
       flex-direction: column;
       align-items: stretch;
-      gap: 14px;
-      margin-bottom: 16px;
+      gap: 12px;
     }
     .bar h1 {
       font-size: 30px;
     }
     .deal {
       text-align: center;
-      font-size: 20px;
-      padding: 15px;
+      font-size: 19px;
+      padding: 14px;
     }
     .stage {
       grid-template-columns: 1fr;
@@ -263,6 +263,9 @@
     .acts a,
     .acts button {
       flex: 1 1 46%;
+    }
+    .acts .hint {
+      flex: 1 1 100%;
     }
     .ad div {
       height: 250px;

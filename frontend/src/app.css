@@ -1,24 +1,28 @@
-/* Design tokens — restrained "clinical paper" theme.
-   One muted accent (teal), a warm paper card, a neutral dark card frame.
+/* Design tokens — "sticker" theme (light, playful, thick ink borders + hard shadows).
    Change these to re-theme the whole UI. */
 :root {
-  --bg-top: #171c24;
-  --bg-bottom: #0c0f14;
-  --card: #f4f2ea; /* warm paper */
-  --ink: #1b222e; /* text on the paper card */
-  --muted: #707784;
-  --accent: #2f8073; /* single muted-teal accent */
-  --accent-soft: #3d9184;
-  --on-accent: #ffffff;
-  --frame-top: #2d353f; /* neutral dark card frame */
-  --frame-bottom: #1e242c;
-  --amber: #a97f3a;
-  --green: #2f8067;
-  --red: #b0554d;
-  --felt: #0e1219; /* deep ink for text on light buttons */
-  --page-ink: #d7dde7; /* body text on the dark page */
-  --page-dim: #7a8494;
-  --line: #2a323d;
+  --page: #fff4e3; /* cream page */
+  --card: #ffffff; /* card mount */
+  --face: #fffdf7; /* card face */
+  --ink: #2a2340; /* text + borders */
+  --grape: #7b5be8; /* primary action / stat bars */
+  --grape-shadow: #2a2340;
+  --melon: #ff5f7e; /* deal button */
+  --melon-shadow: #d93e5e;
+  --mint: #5bd6a6; /* freshly appraised */
+  --mint-ink: #123c2c;
+  --good: #28b487; /* good stat segments */
+  --butter: #ffc94d; /* gem */
+  --butter-shadow: #e0a722;
+  --butter-ink: #3a2e10;
+  --sky: #9be8ff; /* highlight underline / art */
+  --warn: #ff8a3d; /* warn stat segments / labels */
+  --bad: #e8455f; /* bad stat segments */
+  --muted: #7b7192;
+  --muted-2: #8a7fa6;
+  --soft-ink: #6b6386;
+  --seg-off: #eae5f3; /* empty stat segment */
+  --line: rgba(42, 35, 64, 0.14);
 }
 
 * {
@@ -31,14 +35,14 @@ body {
   max-width: 1440px;
   margin: 0 auto;
   min-height: 100vh;
-  background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
-  color: var(--page-ink);
-  font-family: 'Archivo', sans-serif;
-  padding: 30px 52px 40px;
+  background: var(--page);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  padding: 30px 52px 34px;
 }
 
 @media (max-width: 900px) {
   body {
-    padding: 16px 14px 28px;
+    padding: 16px 14px 30px;
   }
 }
