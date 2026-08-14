@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     image_quality: str = "medium"  # low | medium | high (gpt-image-1)
 
+    # --- Contact form ------------------------------------------------------
+    # Destination for contact messages — kept server-side, never sent to the
+    # browser. SMTP creds are optional: without them, messages are stored in the
+    # contact_messages table instead of emailed.
+    contact_email: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+
     # --- Fetch window ------------------------------------------------------
     lookback_days: int = 7
 

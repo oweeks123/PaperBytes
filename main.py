@@ -284,6 +284,20 @@ class ArticleImage(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ContactMessage(Base):
+    """A message from the contact form. Always stored; emailed too if SMTP is
+    configured. The destination address is never exposed to the frontend."""
+
+    __tablename__ = "contact_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    from_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ArticleSummary(BaseModel):
     summary: str = Field(description="Conversational summary of up to 200 words (concise, not padded) of the article's aim and key findings")
     specialties: list[str] = Field(description="Medical specialties this article is relevant to")
@@ -664,6 +678,64 @@ async def geo_lookup(
         "flag": geo.flag_emoji(cc),
         "ad_policy": geo.ad_policy(cc),
     }
+
+
+class ContactRequest(BaseModel):
+    message: str
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    website: Optional[str] = None  # honeypot: real users leave this empty
+
+
+def _send_contact_email(from_email: Optional[str], from_name: Optional[str], message: str) -> None:
+    import smtplib
+    from email.message import EmailMessage
+
+    em = EmailMessage()
+    em["Subject"] = f"Paper Hero — message from {from_name or from_email or 'a visitor'}"
+    em["From"] = settings.smtp_user or ""
+    em["To"] = settings.contact_email or ""
+    if from_email:
+        em["Reply-To"] = from_email
+    em.set_content(f"From: {from_name or '—'} <{from_email or 'not provided'}>\n\n{message}")
+    with smtplib.SMTP(settings.smtp_host or "", settings.smtp_port, timeout=20) as smtp:
+        smtp.starttls()
+        smtp.login(settings.smtp_user or "", settings.smtp_password or "")
+        smtp.send_message(em)
+
+
+@app.post("/contact")
+def contact(body: ContactRequest, db: Session = Depends(get_db)):
+    """Receive a contact-form message. Always stored; emailed to CONTACT_EMAIL
+    when SMTP is configured. The destination address is never returned to the
+    client."""
+    if body.website:  # honeypot tripped — silently accept and drop
+        return {"status": "received"}
+    message = (body.message or "").strip()
+    if not (3 <= len(message) <= 5000):
+        raise HTTPException(status_code=400, detail="Please enter a message (3–5000 characters).")
+    from_email = (body.from_email or "").strip()[:200] or None
+    from_name = (body.from_name or "").strip()[:120] or None
+    record = ContactMessage(
+        from_email=from_email,
+        from_name=from_name,
+        message=message,
+        delivered=False,
+        created_at=dt.datetime.now(dt.timezone.utc),
+    )
+    db.add(record)
+    db.commit()
+    delivered = False
+    if settings.contact_email and settings.smtp_host and settings.smtp_user and settings.smtp_password:
+        try:
+            _send_contact_email(from_email, from_name, message)
+            record.delivered = True
+            db.commit()
+            delivered = True
+        except Exception as e:  # noqa: BLE001 — store-only fallback, never 500 the form
+            log.warning("contact_email_failed", error=str(e))
+    log.info("contact_message", delivered=delivered, has_email=bool(from_email))
+    return {"status": "sent" if delivered else "received"}
 
 
 @app.get("/search", response_model=SearchResponse)

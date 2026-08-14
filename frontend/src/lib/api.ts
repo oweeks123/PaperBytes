@@ -96,6 +96,21 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export interface ContactPayload {
+  message: string;
+  from_email?: string;
+  website?: string; // honeypot
+}
+export async function sendContact(p: ContactPayload): Promise<void> {
+  const res = await fetch('/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(p)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { detail?: string }).detail || `HTTP ${res.status}`);
+}
+
 export const getRandom = (daysBack = 30) => json<RandomArticle>(`/random?days_back=${daysBack}`);
 export const getGeo = (country?: string) =>
   json<Geo>(`/geo${country ? `?country=${encodeURIComponent(country)}` : ''}`);
