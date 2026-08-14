@@ -153,21 +153,40 @@ function designRank(design: string): number {
   return 2;
 }
 
+// Oxford/CEBM levels arrive as either Arabic (1a..5) or Roman (I..V), sometimes
+// with a sub-level letter and often embedded in a sentence. Return the numeric
+// level (1..5) plus any sub-level letter, or null if the text isn't a CEBM level.
+function cebmLevel(level: string): { n: number; sub: string } | null {
+  const arabic = level.match(/\b([1-5])([a-c])?\b/i);
+  if (arabic) return { n: parseInt(arabic[1], 10), sub: (arabic[2] || '').toLowerCase() };
+  // Roman numerals are matched case-sensitively (uppercase) to avoid false hits
+  // on stray letters; longest alternative first so "IV" isn't read as "I".
+  const roman = level.match(/\b(IV|V|III|II|I)([a-c])?\b/);
+  if (roman) {
+    const map: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+    return { n: map[roman[1]], sub: (roman[2] || '').toLowerCase() };
+  }
+  return null;
+}
+
 function levelInfo(level: string): { filled: number; tone: Tone } {
-  const m = level.match(/[1-5]/);
-  const n = m ? parseInt(m[0], 10) : 3;
+  const c = cebmLevel(level);
+  const n = c ? c.n : 3;
   return { filled: Math.max(1, 7 - n), tone: n <= 2 ? 'good' : n <= 3 ? 'ink' : 'warn' };
 }
 
 // The AI's level_of_evidence is sometimes a whole sentence; the gem needs a short
-// code. Prefer a CEBM level (1a..5), else a GRADE initial, else a short fallback.
+// code. Prefer a CEBM level (Arabic or Roman), else a GRADE initial, else a clean
+// fallback ('N/A' for not-applicable phrasings, '—' otherwise — never a clipped word).
 function shortLevel(level: string): string {
-  const cebm = level.match(/\b([1-5][a-c]?)\b/i);
-  if (cebm) return cebm[1].toLowerCase();
+  const c = cebmLevel(level);
+  if (c) return String(c.n) + c.sub;
   const grade = level.match(/very low|high|moderate|low/i);
   if (grade) return grade[0][0].toUpperCase();
+  if (/n\/?a|not applicable|not specified|not reported|unclear|insufficient|unable|cannot/i.test(level))
+    return 'N/A';
   const trimmed = level.trim();
-  return trimmed.length <= 4 ? trimmed || '—' : trimmed.slice(0, 3) + '…';
+  return trimmed.length <= 4 ? trimmed || '—' : '—';
 }
 
 // Conservative significance flag from a reported p-value only (we don't guess from
