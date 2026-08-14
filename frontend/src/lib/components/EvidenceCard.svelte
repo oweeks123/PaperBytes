@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CardModel, Tone } from '$lib/api';
-  import DrawingHero from './DrawingHero.svelte';
 
   let { card }: { card: CardModel } = $props();
 
@@ -26,7 +25,9 @@
     </div>
 
     <div class="artwrap">
-      <DrawingHero />
+      <div class="ph" aria-label="Your hero is coming!">
+        <div class="coming"><span>Your hero</span><span>is coming!</span></div>
+      </div>
       <img
         class="art-img"
         class:show={imgOk}
@@ -35,7 +36,7 @@
         onload={() => (imgOk = true)}
         onerror={() => (imgOk = false)}
       />
-      <div class="aitag">AI illustration · {imgOk ? 'from the title' : 'drawing…'}</div>
+      <div class="aitag">AI illustration · {imgOk ? 'from the title' : 'coming…'}</div>
     </div>
 
     <div class="typeline">
@@ -205,22 +206,56 @@
     border-radius: 16px;
     border: 3px solid var(--ink);
     overflow: hidden;
+    aspect-ratio: 3 / 2;
+    container-type: inline-size;
+    background: #fbe6a6;
   }
-  .art {
-    width: 100%;
+  /* Holding graphic: a full-bleed comic sunburst; only the words pulse. */
+  .ph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: repeating-conic-gradient(
+      from 0deg at 50% 45%,
+      #ffd45a 0deg 7deg,
+      #fbe6a6 7deg 14deg
+    );
+  }
+  .coming {
+    text-align: center;
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  .coming span {
     display: block;
+    font-family: 'Bangers', system-ui, sans-serif;
+    color: #c0392b;
+    line-height: 0.9;
+    letter-spacing: 1.5px;
+    font-size: clamp(26px, 12cqw, 92px);
+    -webkit-text-stroke: 2.5px #2a2340;
+    paint-order: stroke fill;
+    text-shadow: 3px 3px 0 #2a2340;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: rotate(-4deg) scale(1); }
+    50% { transform: rotate(-4deg) scale(1.06); }
   }
   .art-img {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: cover; /* matches the generated 3:2 image -> whole hero, no crop */
     opacity: 0;
-    transition: opacity 0.4s ease;
+    transition: opacity 0.5s ease;
   }
   .art-img.show {
     opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .coming { animation: none; }
   }
   .aitag {
     position: absolute;
