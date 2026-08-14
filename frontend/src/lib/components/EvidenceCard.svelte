@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CardModel, Tone } from '$lib/api';
+  import DrawingHero from './DrawingHero.svelte';
 
   let { card }: { card: CardModel } = $props();
 
@@ -25,20 +26,7 @@
     </div>
 
     <div class="artwrap">
-      <svg class="art" viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" role="img"
-           aria-label="Decorative illustration placeholder">
-        <rect width="560" height="200" fill="#9be8ff" />
-        <circle cx="86" cy="58" r="48" fill="#5bd6a6" opacity="0.55" />
-        <circle cx="486" cy="150" r="64" fill="#7b5be8" opacity="0.26" />
-        <rect x="0" y="162" width="560" height="38" fill="#5bd6a6" opacity="0.45" />
-        <rect x="250" y="70" width="60" height="76" rx="8" fill="#fffdf7"
-              stroke="#2a2340" stroke-width="4" />
-        <line x1="262" y1="90" x2="298" y2="90" stroke="#2a2340" stroke-width="4" stroke-linecap="round" />
-        <line x1="262" y1="104" x2="298" y2="104" stroke="#2a2340" stroke-width="4" stroke-linecap="round" />
-        <line x1="262" y1="118" x2="286" y2="118" stroke="#2a2340" stroke-width="4" stroke-linecap="round" />
-        <circle cx="330" cy="64" r="9" fill="#ffc94d" stroke="#2a2340" stroke-width="3" />
-        <circle cx="214" cy="132" r="7" fill="#ff5f7e" stroke="#2a2340" stroke-width="3" />
-      </svg>
+      <DrawingHero />
       <img
         class="art-img"
         class:show={imgOk}
@@ -47,7 +35,7 @@
         onload={() => (imgOk = true)}
         onerror={() => (imgOk = false)}
       />
-      <div class="aitag">AI illustration · {imgOk ? 'from the title' : 'placeholder'}</div>
+      <div class="aitag">AI illustration · {imgOk ? 'from the title' : 'drawing…'}</div>
     </div>
 
     <div class="typeline">
