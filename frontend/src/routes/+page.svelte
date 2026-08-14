@@ -92,7 +92,7 @@
 
 <div class="bar">
   <div>
-    <h1>Paper Hero</h1>
+    <h1>Paper Heros</h1>
     <div class="sub">
       ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.
     </div>
