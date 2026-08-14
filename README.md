@@ -1,203 +1,213 @@
-# PaperBytes
+# Paper Hero (PaperBytes)
 
-FastAPI service that retrieves recent clinical articles from PubMed using hard
-filters, summarises each with Claude, and stores results in a SQL database.
+A daily clinical-evidence "card". Each visit deals **one recently-published paper**,
+drawn at random from a curated set of medical journals, **appraised by AI**, and
+presented as a comic-book **trading card** — AI summary, critical appraisal, the
+reported statistics with a significance read, and an AI-generated **hero/villain
+illustration** of the topic (a superhero for beneficial findings, a villain for
+harms/risks).
 
-Retrieval runs against NCBI E-utilities through an async client
-(`paperbytes/pubmed/`): a typed query builder, an `httpx` client with rate
-limiting, retries, and history-server paging, and an `lxml` parser that normalises
-EFetch XML into typed `PubMedArticle` objects. See
-[`PROMPT_layer1_retrieval.md`](PROMPT_layer1_retrieval.md) for the design spec.
+This repository is the **free-tier MVP**, packaged for deployment. The registered
+and paid tiers exist as backend endpoints and are on the roadmap for the frontend.
 
-## Running locally
+---
 
-No external services required — storage defaults to a local SQLite file.
+## Stack
 
-1. Install dependencies (a virtualenv is recommended):
-   ```sh
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-2. (Optional) Copy `.env.example` to `.env` and fill it in. It is auto-loaded on
-   startup. `/search` needs `PUBMED_EMAIL`; `/fetch` additionally needs
-   `ANTHROPIC_API_KEY`; the read endpoints (`/articles`, `/specialties`) work
-   without any config.
-3. Run it:
-   ```sh
-   python main.py            # http://localhost:8000
-   RELOAD=1 python main.py   # with auto-reload for development
-   ```
-   The tables are created automatically on startup (in `paperbytes.db`).
+- **Backend** — FastAPI (Python 3.12), SQLAlchemy (SQLite locally / Postgres in
+  production), served with uvicorn.
+- **Frontend** — SvelteKit (Svelte 5, `adapter-static`, scoped component styles),
+  built to static files and served by FastAPI at **`/ui`** (same origin, no CORS).
+- **Retrieval** — PubMed via NCBI E-utilities (`paperbytes/pubmed`).
+- **AI** — **Anthropic Claude** for the summary + critical appraisal;
+  **OpenAI `gpt-image-1`** for the card illustration. (Anthropic has no image API,
+  hence the second provider.)
 
-Then browse the interactive docs at `http://localhost:8000/docs`, or open the
-**UI at `http://localhost:8000/ui/`**.
+## Project structure
 
-### Frontend (SvelteKit)
+```
+pb-backend/
+├─ main.py                 FastAPI app: routes, ORM models, AI calls, image gen
+├─ paperbytes/             support package (passes mypy --strict)
+│  ├─ config.py            Settings via pydantic-settings
+│  ├─ geo.py               IP → country (country-gated ads)
+│  ├─ pdf.py               summary/appraisal PDF (reportlab)
+│  └─ pubmed/              E-utilities client, query builder, XML parser, models, filters
+├─ frontend/               SvelteKit app → builds to frontend/build, served at /ui
+│  └─ src/lib/components/  EvidenceCard.svelte (the trading card), …
+├─ tests/                  pytest (query / parser / client / geo / pdf / filters)
+├─ docs/                   design mockup + specs (see below)
+├─ article_bucket.txt      curated journal allowlist (one title per line)
+├─ validate_journals.py    checks the bucket resolves against PubMed
+├─ Dockerfile / .dockerignore
+├─ requirements.txt        runtime deps   (requirements-dev.txt = + test/lint)
+├─ pyproject.toml          pytest / mypy / ruff config
+└─ .env.example
+```
 
-The UI is a SvelteKit app in `frontend/` (Svelte 5, `adapter-static`, scoped
-component styles — no Tailwind). The free-tier home is a **trading-card "pull"**:
-one random appraised paper rendered as an evidence card (CEBM gem, tags, stat-block
-pips, PICO appraisal, limitations, PubMed link, Download-PDF), re-dealt on refresh.
+## Quick start (development)
+
+Two processes: the API (uvicorn) and the frontend dev server (Vite, which proxies
+API calls to the API). Requires **Python 3.12+** and **Node 20+**.
 
 ```sh
+# 1) Backend
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+cp .env.example .env        # fill in PUBMED_EMAIL + ANTHROPIC_API_KEY (OPENAI_API_KEY optional)
+python main.py              # API on http://localhost:8000
+
+# 2) Frontend (separate terminal)
 cd frontend
 npm install
-npm run dev      # Vite dev server (proxies /random, /geo, … to :8000)
-npm run build    # static build -> frontend/build, served by FastAPI at /ui
+npm run dev                 # http://localhost:5173/ui  (API proxied to :8000)
 ```
 
-FastAPI serves `frontend/build` at `/ui` (base path `/ui`, same origin — no CORS).
-`frontend/build` is gitignored, so **run `npm run build` before starting uvicorn**
-if you want the UI served in production. `evidence-card-example.html` is the static
-design mockup the card is based on. (The earlier vanilla UI in `web/` — with the
-registered/paid tier features — is retained for reference pending a SvelteKit port.)
+No credentials? Set `MOCK_ANALYSIS=1` to fill appraisals from metadata; without an
+`OPENAI_API_KEY` the card shows the "Your hero is coming!" placeholder. The **read**
+endpoints work with no config at all.
 
-The `/random` and `/fetch` endpoints call Anthropic to generate the summary +
-appraisal (one call per paper, then cached). **Without API credits, set
-`MOCK_ANALYSIS=1`** to fill the appraisal from article metadata so the whole UI is
-demoable; turn it off once credits are available for real AI analysis.
+## Production build & run
 
-To preview what retrieval pulls without summarising or storing:
+The frontend is built to static files and served by FastAPI, so a deployment is a
+single service.
+
+**Docker (recommended):**
 
 ```sh
-curl "localhost:8000/search?days_back=3&limit=5"          # AIM core journals
-curl "localhost:8000/search?days_back=3&journal_scope=all&limit=5"
+docker build -t paper-hero .
+docker run -p 8000:8000 --env-file .env paper-hero
+# open http://localhost:8000/ui/
 ```
 
-To fetch, summarise, and store (needs both credentials):
+**Manual:**
 
 ```sh
-curl -XPOST "localhost:8000/fetch/sync?lookback_days=2"
+cd frontend && npm ci && npm run build && cd ..
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### Getting an NCBI API key (recommended, not required)
-
-Retrieval works anonymously at NCBI's default 3 requests/second. Registering a
-free API key raises that to 10/s:
-
-1. Sign in at <https://www.ncbi.nlm.nih.gov/account/>.
-2. Open **Account Settings → API Key Management** and create a key.
-3. Put it in `.env` as `NCBI_API_KEY=...` (and set `PUBMED_EMAIL`). The client
-   detects the key and switches to the 10/s limit automatically.
+- The app UI is at **`/ui/`**; `/` is a health/config JSON (handy for platform
+  health checks).
+- `frontend/build` is gitignored — **build it before serving** (the Docker image
+  does this in a Node build stage).
+- Config is provided at runtime via env vars, never baked into the image.
+- For persistence across redeploys, point `DATABASE_URL` at Postgres (SQLite in a
+  container is ephemeral, so cached appraisals/illustrations would regenerate).
 
 ## Configuration
 
+All via environment / `.env` (see `.env.example`).
+
 | Var | Required | Default | Notes |
 |---|---|---|---|
-| `PUBMED_EMAIL` | for `/search`, `/fetch` | — | Contact email required by NCBI's usage policy |
-| `NCBI_API_KEY` | no | — | Raises the NCBI rate limit from 3/s to 10/s |
-| `NCBI_TOOL` | no | `PaperBytes` | Tool name sent to NCBI |
-| `PUBMED_PAGE_SIZE` | no | `100` | EFetch page size / history-server paging threshold |
-| `PUBMED_TIMEOUT_SECONDS` | no | `20` | Per-request timeout |
-| `ANTHROPIC_API_KEY` | for `/fetch` | — | From console.anthropic.com |
-| `CLAUDE_MODEL` | no | `claude-haiku-4-5` | Try `claude-sonnet-4-6` for higher quality |
-| `OPENAI_API_KEY` | no | — | Enables AI card illustrations (gpt-image-1). Without it, the placeholder art is used |
-| `IMAGE_QUALITY` | no | `medium` | gpt-image-1 quality: `low` / `medium` / `high` |
-| `LOOKBACK_DAYS` | no | `7` | Default fetch/search window |
-| `DATABASE_URL` | no | `sqlite:///./paperbytes.db` | Point at Postgres for deployment |
-| `LOG_LEVEL` | no | `INFO` | structlog level |
-| `PORT` | no | `8000` | Listen port |
-| `RELOAD` | no | off | Set `1` for uvicorn auto-reload |
-| `MOCK_ANALYSIS` | no | off | Set `1` to fill `/random` appraisals from metadata instead of calling Anthropic (demo without API credits) |
+| `PUBMED_EMAIL` | for `/random`,`/search` | — | NCBI contact email |
+| `ANTHROPIC_API_KEY` | for appraisal | — | Claude summary + appraisal |
+| `CLAUDE_MODEL` | no | `claude-haiku-4-5` | e.g. `claude-sonnet-4-6` for higher quality |
+| `MOCK_ANALYSIS` | no | `0` | `1` = metadata mock (no Anthropic spend) |
+| `OPENAI_API_KEY` | no | — | Enables card illustrations (gpt-image-1) |
+| `IMAGE_QUALITY` | no | `medium` | `low` / `medium` / `high` |
+| `CONTACT_EMAIL` | no | — | Contact-form destination (server-side only) |
+| `SMTP_HOST/PORT/USER/PASSWORD` | no | —/587 | Deliver contact messages (else stored in DB) |
+| `NCBI_API_KEY` | no | — | Raises NCBI rate limit 3→10/s |
+| `DATABASE_URL` | no | `sqlite:///./paperbytes.db` | Postgres for deployment |
+| `LOOKBACK_DAYS` | no | `7` | Default search window |
+| `LOG_LEVEL` / `PORT` / `RELOAD` | no | `INFO`/`8000`/off | |
 
-Storage is engine-agnostic (SQLAlchemy): SQLite locally, Postgres in a container.
-A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatically.
+**Cost note:** each *new* paper triggers one Claude call (cheap) and, if enabled,
+one gpt-image-1 image (~$0.01–0.04, `IMAGE_QUALITY`-dependent). Both are cached per
+PMID, so repeats are free.
 
-## Endpoints
+## API
+
+**Free tier (public):**
 
 | Method | Path | What it does |
 |---|---|---|
-| `GET` | `/` | Health + config (model, NCBI key configured, rate limit, mock flag) |
-| `GET` | `/geo` | Resolve the client's country from their IP (localhost → GB). Drives country-gated advertising rules. `?country=XX` overrides for testing |
-| `GET` | `/random` | Free-tier home feed: a random article from the past N days (default 30) with an AI summary + critical-appraisal table. Analyses each paper once, then caches |
-| `GET` | `/articles/{pubmed_id}/summary.pdf` | Portfolio PDF of a stored article's summary + appraisal |
-| `POST` | `/articles/{pubmed_id}/summary.pdf` | Same PDF, with an optional (transient, unstored) practitioner reflection in the body |
-| `GET` | `/articles/{pubmed_id}/image` | AI illustration (OpenAI gpt-image-1), generated + cached on first request (WebP). 404 without `OPENAI_API_KEY` → frontend uses its placeholder |
-| `POST` | `/auth/register` | Register/sign in with email + professional registration; returns a session token (lightweight, no password) |
-| `GET` | `/auth/me` | Current user (from `Authorization: Bearer <token>`) |
-| `POST` | `/auth/upgrade` · `/auth/downgrade` | Simulated switch between paid and free-registered tiers |
-| `POST` | `/reading-list` | (Paid) add an article with an optional stored reflection |
-| `GET` | `/reading-list?q=` | (Paid) list/search the reading list (title, journal, specialty, reflection) |
-| `PATCH` | `/reading-list/{pubmed_id}` | (Paid) update the stored reflection |
-| `DELETE` | `/reading-list/{pubmed_id}` | (Paid) remove from the reading list |
-| `GET` | `/search` | Live retrieval preview (query params). Does not summarise or store. Returns the resolved NCBI term |
-| `POST` | `/search` | Same, taking a full `SearchFilters` body (custom pub-types, MeSH terms, `extra_terms`) |
-| `POST` | `/fetch` | Kick off a background fetch+summarise+store pass |
-| `POST` | `/fetch/sync` | Same, but waits and returns counts (slow; useful for cron) |
-| `GET` | `/articles` | List stored articles. Filters: `specialty`, `journal`, `sent`, `limit`, `offset` |
-| `GET` | `/articles/{pubmed_id}` | Get one article |
-| `PATCH` | `/articles/{pubmed_id}?sent=true` | Mark as sent |
-| `DELETE` | `/articles/{pubmed_id}` | Delete |
-| `GET` | `/specialties` | Count of articles per specialty |
+| `GET` | `/` | Health + config |
+| `GET` | `/random?days_back=30` | Deal a random appraised paper (summary + appraisal + stats). Analyses once, caches |
+| `GET` | `/articles/{pmid}/image` | AI illustration; generated + cached on first request (WebP). 404 without an OpenAI key |
+| `GET`/`POST` | `/articles/{pmid}/summary.pdf` | Portfolio PDF (POST body may carry a transient reflection) |
+| `POST` | `/contact` | Store + optionally email a contact message (honeypot-protected) |
+| `GET` | `/geo` | Client country from IP (drives country-gated ads; UK rules first) |
 
-### Search filters
+**Dev / admin:** `GET/POST /search`, `POST /fetch`, `POST /fetch/sync`,
+`GET /articles`, `GET/PATCH/DELETE /articles/{pmid}`, `GET /specialties`.
 
-`/search` and `/fetch` build a hard-filtered PubMed query. Defaults target recent,
-high-quality clinical evidence:
+**Registered / paid (backend implemented, frontend pending):**
+`POST /auth/register`, `GET /auth/me`, `POST /auth/upgrade|downgrade`,
+`POST/GET /reading-list`, `PATCH/DELETE /reading-list/{pmid}`.
 
-- **Date field (`date_field`)**: `mhda` (MeSH date, **default**), `edat`
-  (added-to-PubMed date), or `pdat` (publication date). MeSH terms and publication
-  types are only assigned once a record is fully MeSH-indexed, which lags
-  publication by weeks. Keying the window on **MeSH date** means the result set is
-  MeSH-complete, so the `humans[MeSH]` and publication-type filters actually match
-  recent records. Use `edat` for a bleeding-edge window, but then turn the MeSH
-  filters off (see below) or you will exclude everything not yet indexed.
-- **`journal_scope`**: `curated` (the project's curated allowlist, **default**),
-  `all` (no journal restriction), or `aim`. The curated list is loaded from
-  **`article_bucket.txt`** at the backend root — one journal title per line — so
-  the scope can be edited without touching code. **Note:** `aim` (`jsubsetaim`) is
-  retired at NCBI and matches nothing — kept only for backward compatibility.
-- **Species / language**: humans + English by default; each toggleable. Because
-  the default date field is MHDA, `humans[MeSH]` is safe to leave on.
-- **Publication types**: includes RCTs, meta-analyses, systematic reviews, practice
-  guidelines, observational studies; excludes comments, editorials, letters,
-  retractions, preprints. Both lists are overridable (pass `[]` to disable a group,
-  omit to use the presets).
-- `extra_terms` (freeform, AND-ed) and `mesh_terms` (OR-ed) for `POST /search`.
+Interactive docs at `/docs`.
 
-Every search/fetch response echoes the exact `resolved_term` sent to NCBI.
+## How the card is built
 
-> **Tip:** if a query returns nothing, it is almost always the MeSH lag. Either
-> keep `date_field=mhda` (recommended — the set stays MeSH-complete), or switch to
-> `date_field=edat` with `restrict_humans=false` and the included pub-types off for
-> a truly-just-indexed view.
+- **Retrieval** — a hard-filtered PubMed query over the curated journals
+  (`article_bucket.txt`), keyed on **`[MHDA]` (MeSH date)** so records are
+  MeSH-complete and the `humans[MeSH]` / publication-type filters actually match.
+  See `docs/retrieval-layer-spec.md`.
+- **Appraisal** — one Claude `messages.parse` call returns a structured
+  `CriticalAppraisal` (PICO, every reported outcome with its stats, a significance
+  comment, risk of bias, level of evidence, limitations) plus a conversational
+  summary. Cached in the `articles` table.
+- **Illustration** — one gpt-image-1 call renders a consistent comic-book
+  character (hero for benefits, villain for harms) embodying the topic; re-encoded
+  to WebP and cached in `article_images`.
 
-## Development
+### Journal scope
+
+`article_bucket.txt` is the curated allowlist (one title per line); edit it to
+change the scope — no code change. Titles go to PubMed's `[Journal]` field
+**unquoted and normalised** (a quoted title must equal the exact NLM name). Verify
+the whole list resolves:
 
 ```sh
-pytest            # unit + parser (fixtures) + client (respx) tests; no network
-mypy              # strict type-check of the paperbytes/ package
-ruff check paperbytes/
+PUBMED_EMAIL=you@example.com python validate_journals.py
 ```
 
-## Tiers & advertising (in progress)
+## Testing & quality
 
-The UI shows a country flag (top-right, from `/geo`) and a tier switcher. Advertising
-is gated by country + tier — **UK rules first**:
+```sh
+pytest                          # unit tests: query, parser (fixtures), client (respx), geo, pdf
+mypy                            # strict type-check of the paperbytes/ package
+ruff check paperbytes/ tests/
+```
 
-- **Free** — random appraised articles, generic Google AdSense slot (placeholder).
-- **Free registered practitioner** — (registration is currently simulated by the
-  switcher) full pharma / POM advertising in the UK; an optional **reflection** can be
-  added to the downloaded PDF but is **not stored** (discarded on refresh).
-- **Paid registered practitioner** — pharma / POM advertising, plus a searchable
-  **reading list**: "add to reading list" stores the article with a reflection that
-  is updatable and included in the PDF.
+`main.py` (routes, AI calls) is verified by integration/manual testing rather than
+unit tests; the typed, side-effect-free logic lives in `paperbytes/` and is unit
+tested + `mypy --strict`.
 
-Auth is lightweight and token-based (email + professional registration, no password
-yet — to be hardened). The paid tier is unlocked by a **simulated upgrade** (no real
-payment yet). Sign-in state persists in the browser via the session token.
+## Data & migrations
+
+SQLAlchemy models; tables are created on startup via `Base.metadata.create_all`
+(**no migration framework**). Adding tables is transparent; **adding columns to an
+existing table needs a manual migration** (or a dev DB rebuild). Consider adding
+Alembic before the next schema change.
+
+## Roadmap / future development
+
+- **Port the registered + paid tiers to SvelteKit** — the backend endpoints
+  (accounts, reading list, stored reflections, tier gating) already exist; the
+  earlier vanilla prototype UI for them is in git history (removed here to keep the
+  MVP clean). See `docs/product-tiers-brief.md`.
+- **Contact delivery** — add SMTP creds (Gmail app password) or swap to a
+  transactional email service.
+- **Country-gated advertising** — `/geo` + ad policy are wired; add real ad units
+  (AdSense free tier; pharma/POM for registered tiers, UK rules first).
+- **Auth hardening + payments** — current auth is a lightweight token (no
+  password/verification); the paid tier is a simulated upgrade (no Stripe yet).
+- **Migrations** — introduce Alembic; persist richer article fields (DOI, MeSH,
+  entrez date) currently dropped at the storage boundary.
+
+## Reference docs (`docs/`)
+
+- `docs/retrieval-layer-spec.md` — the PubMed retrieval layer spec.
+- `docs/product-tiers-brief.md` — the free/registered/paid tier brief.
+- `docs/card-design-mockup.html` — the static "sticker" card design mockup.
 
 ## Notes
 
-- Default model is `claude-haiku-4-5` since this is high-volume short-summary work.
-  Set `CLAUDE_MODEL=claude-sonnet-4-6` or `claude-opus-4-7` for higher quality.
-- Retrieval is fully async (`httpx`); the synchronous Claude summarisation call is
-  off-loaded to a threadpool so the event loop is never blocked.
-- Articles are keyed by PubMed ID, so re-running `/fetch` skips ones already
-  stored. Specialties live in a related `article_specialties` table so filtering
-  and counts run in portable SQL.
-- Rich parsed fields (DOI, MeSH terms, structured abstract sections, Entrez date)
-  are available from retrieval but not all persisted yet — adding columns for them
-  is a later migration. The storage mapping lives in `to_storage_fields`.
-- Deployment will be containerised later; the app already reads `DATABASE_URL` and
-  `PORT` from the environment for that.
+- Rotate any API keys that were shared during development.
+- Default Claude model is `claude-haiku-4-5` (cheap, good for high-volume short
+  summaries); switch via `CLAUDE_MODEL`.
