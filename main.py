@@ -124,14 +124,18 @@ def get_openai():
 
 
 IMAGE_PROMPT = (
-    "A bold, heroic comic-book cover illustration that celebrates the topic below as if it were "
-    "the hero of the story: {topic}. Epic and triumphant — a dramatic low-angle hero shot with a "
-    "radiant halo / light burst behind the central subject, dynamic energy and a sense of "
-    "victory, in the spirit of a superhero trading card. The central subject must clearly and "
-    "literally depict the actual medical/scientific topic itself — NOT a book, document, page, "
-    "clipboard or a generic scientist. Flat vector art, thick dark outlines, clean bold shapes. "
-    "Colour palette: purple #7B5BE8, pink #FF5F7E, mint green #5BD6A6, yellow #FFC94D, sky "
-    "blue #9BE8FF, on a light warm background. Absolutely no text, no letters, no words, no numbers."
+    "Comic-book character trading-card art. Create ONE central character who personifies the "
+    "topic of a medical research paper: {topic}. If the topic is a treatment, protection, "
+    "benefit or anything helpful, make them a triumphant SUPERHERO; if it is a disease, risk "
+    "factor, harm, toxin or anything harmful, make them a menacing SUPERVILLAIN. The character "
+    "may be male or female. They must clearly and recognisably embody the specific topic through "
+    "their costume, props and theme (not a book, document, clipboard or a generic scientist). "
+    "STYLE — keep this identical every time for a consistent set: classic flat comic-book cover "
+    "illustration, bold uniform black ink outlines, clean cel shading with subtle halftone dots, "
+    "a single character shown from roughly the waist up, centred, in a dramatic low-angle pose, "
+    "on a radial sunburst background. Colour palette: purple #7B5BE8, pink #FF5F7E, mint green "
+    "#5BD6A6, yellow #FFC94D, sky blue #9BE8FF, ink #2A2340, on a warm cream background. "
+    "Absolutely no text, no letters, no words, no numbers, no logos."
 )
 
 
