@@ -98,32 +98,32 @@
   .bar h1 {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 38px;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.05em;
     line-height: 1;
-    background: linear-gradient(92deg, var(--h1), var(--h2) 50%, var(--h3));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #eaeff6;
   }
   .sub {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.14em;
-    color: #8296b5;
+    color: var(--page-dim);
     margin-top: 5px;
   }
   .deal {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 23px;
     letter-spacing: 0.07em;
-    background: linear-gradient(92deg, var(--h1), var(--h2));
-    color: #0f1b30;
-    padding: 14px 30px;
+    background: var(--accent);
+    color: var(--on-accent);
+    padding: 13px 30px;
     border: none;
-    border-radius: 11px;
+    border-radius: 10px;
     cursor: pointer;
-    box-shadow: 0 6px 22px rgba(140, 120, 240, 0.35);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     white-space: nowrap;
+  }
+  .deal:hover {
+    background: var(--accent-soft);
   }
   .deal:disabled {
     opacity: 0.6;
@@ -150,19 +150,28 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     text-decoration: none;
-    color: #c6d5ec;
+    color: #c4ccd8;
     background: transparent;
-    border: 1px solid #2e4468;
-    border-radius: 11px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
     padding: 13px 15px;
     text-align: center;
     cursor: pointer;
   }
+  .acts a:hover,
+  .acts button:hover {
+    border-color: var(--accent);
+    color: #eaeff6;
+  }
   .acts a.primary {
-    background: #eaf0fa;
-    color: var(--felt);
-    border-color: #eaf0fa;
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
     font-weight: 700;
+  }
+  .acts a.primary:hover {
+    background: var(--accent-soft);
+    color: var(--on-accent);
   }
   .acts .hint {
     font-family: 'JetBrains Mono', monospace;
@@ -185,7 +194,7 @@
     text-align: center;
   }
   .msg.err {
-    color: #f5a8c8;
+    color: #d98b83;
   }
 
   .rail {

@@ -21,3 +21,6 @@ env/
 # Local generated artifacts
 *_preview.png
 /summary.pdf
+
+# screenshots / image scratch at backend root (keeps frontend/static pngs)
+/*.png

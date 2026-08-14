@@ -69,10 +69,10 @@
 
 <style>
   .card {
-    border-radius: 20px;
-    padding: 9px;
-    background: linear-gradient(135deg, var(--h1), var(--h2) 34%, var(--h3) 62%, var(--h1));
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 50px rgba(150, 120, 240, 0.35);
+    border-radius: 16px;
+    padding: 6px;
+    background: linear-gradient(160deg, var(--frame-top), var(--frame-bottom));
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
   }
   .face {
     background: var(--card);
@@ -94,29 +94,37 @@
     flex: 1;
   }
   .gem {
-    width: 58px;
-    height: 58px;
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     flex: none;
-    background: linear-gradient(135deg, var(--h1), var(--h2) 55%, var(--h3));
-    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.8), 0 3px 8px rgba(0, 0, 0, 0.35);
+    background: var(--accent);
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     line-height: 1;
+    overflow: hidden; /* defensive: never let a long level code spill out */
+    padding: 2px;
+  }
+  .gem b {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .gem b {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 26px;
-    color: #101827;
+    font-size: 24px;
+    color: #fff;
   }
   .gem i {
     font-family: 'JetBrains Mono', monospace;
     font-size: 6px;
     letter-spacing: 0.1em;
     font-style: normal;
-    color: #2a3346;
+    color: rgba(255, 255, 255, 0.72);
     margin-top: 1px;
   }
   .tags {
@@ -195,7 +203,7 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
-    width: 96px;
+    width: 84px;
     font-weight: 400;
     white-space: nowrap;
   }
@@ -226,7 +234,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
     text-decoration: none;
-    width: 72px;
+    width: 110px;
     text-align: right;
     font-weight: 700;
     white-space: nowrap;
