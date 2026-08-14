@@ -5,6 +5,10 @@
 
   const toneCls: Record<Tone, string> = { ink: '', good: 'g', warn: 'w', bad: 'b' };
   const SIX = [0, 1, 2, 3, 4, 5];
+
+  // Real AI illustration fades in over the placeholder once it loads (or has been
+  // generated + cached). Stays on the placeholder if the endpoint 404s (no key).
+  let imgOk = $state(false);
 </script>
 
 <div class="card">
@@ -35,7 +39,15 @@
         <circle cx="330" cy="64" r="9" fill="#ffc94d" stroke="#2a2340" stroke-width="3" />
         <circle cx="214" cy="132" r="7" fill="#ff5f7e" stroke="#2a2340" stroke-width="3" />
       </svg>
-      <div class="aitag">AI illustration · placeholder</div>
+      <img
+        class="art-img"
+        class:show={imgOk}
+        src={`/articles/${encodeURIComponent(card.pmid)}/image`}
+        alt="AI illustration generated from the paper title"
+        onload={() => (imgOk = true)}
+        onerror={() => (imgOk = false)}
+      />
+      <div class="aitag">AI illustration · {imgOk ? 'from the title' : 'placeholder'}</div>
     </div>
 
     <div class="typeline">
@@ -209,6 +221,18 @@
   .art {
     width: 100%;
     display: block;
+  }
+  .art-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .art-img.show {
+    opacity: 1;
   }
   .aitag {
     position: absolute;

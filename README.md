@@ -91,6 +91,8 @@ free API key raises that to 10/s:
 | `PUBMED_TIMEOUT_SECONDS` | no | `20` | Per-request timeout |
 | `ANTHROPIC_API_KEY` | for `/fetch` | — | From console.anthropic.com |
 | `CLAUDE_MODEL` | no | `claude-haiku-4-5` | Try `claude-sonnet-4-6` for higher quality |
+| `OPENAI_API_KEY` | no | — | Enables AI card illustrations (gpt-image-1). Without it, the placeholder art is used |
+| `IMAGE_QUALITY` | no | `low` | gpt-image-1 quality: `low` / `medium` / `high` |
 | `LOOKBACK_DAYS` | no | `7` | Default fetch/search window |
 | `DATABASE_URL` | no | `sqlite:///./paperbytes.db` | Point at Postgres for deployment |
 | `LOG_LEVEL` | no | `INFO` | structlog level |
@@ -110,6 +112,7 @@ A legacy `postgres://` `DATABASE_URL` is normalised to `postgresql://` automatic
 | `GET` | `/random` | Free-tier home feed: a random article from the past N days (default 30) with an AI summary + critical-appraisal table. Analyses each paper once, then caches |
 | `GET` | `/articles/{pubmed_id}/summary.pdf` | Portfolio PDF of a stored article's summary + appraisal |
 | `POST` | `/articles/{pubmed_id}/summary.pdf` | Same PDF, with an optional (transient, unstored) practitioner reflection in the body |
+| `GET` | `/articles/{pubmed_id}/image` | AI illustration (OpenAI gpt-image-1), generated + cached on first request (WebP). 404 without `OPENAI_API_KEY` → frontend uses its placeholder |
 | `POST` | `/auth/register` | Register/sign in with email + professional registration; returns a session token (lightweight, no password) |
 | `GET` | `/auth/me` | Current user (from `Authorization: Bearer <token>`) |
 | `POST` | `/auth/upgrade` · `/auth/downgrade` | Simulated switch between paid and free-registered tiers |

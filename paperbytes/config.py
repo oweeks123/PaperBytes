@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # (once credits exist) transparently swaps in real AI analysis.
     mock_analysis: bool = False
 
+    # --- AI illustration (OpenAI images) -----------------------------------
+    # Optional; without a key the card uses the placeholder art.
+    openai_api_key: str | None = None
+    image_quality: str = "low"  # low | medium | high (gpt-image-1)
+
     # --- Fetch window ------------------------------------------------------
     lookback_days: int = 7
 

@@ -1,4 +1,6 @@
+import base64
 import datetime as dt
+import io
 import logging
 import os
 import random
@@ -28,6 +30,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -100,6 +103,63 @@ def get_claude() -> anthropic.Anthropic:
             raise RuntimeError("ANTHROPIC_API_KEY is not set")
         _claude = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     return _claude
+
+
+# OpenAI client for illustration generation (lazy — only imported/created if a key
+# is configured, so the app runs fine without it).
+_openai = None
+
+
+def get_openai():
+    global _openai
+    if _openai is None:
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        from openai import OpenAI
+
+        # Fail reasonably fast (image gen can take ~30s, but don't retry-storm on
+        # a permanent error like insufficient_quota).
+        _openai = OpenAI(api_key=settings.openai_api_key, max_retries=1, timeout=90.0)
+    return _openai
+
+
+IMAGE_PROMPT = (
+    "Minimal, playful, flat vector editorial illustration representing the concept of: "
+    "{topic}. Sticker style — rounded shapes, thick dark outlines, generous negative space. "
+    "Colour palette: purple #7B5BE8, pink #FF5F7E, mint green #5BD6A6, yellow #FFC94D, sky "
+    "blue #9BE8FF, on a light warm background. Friendly, modern, conceptual and tasteful. "
+    "Absolutely no text, no letters, no words, no numbers, no captions."
+)
+
+
+def _to_webp(png: bytes, max_width: int = 1024, quality: int = 80) -> bytes:
+    """Re-encode a (large) PNG to a web-friendly WebP, capped in width. gpt-image-1
+    returns ~2 MB PNGs; this brings a hero image down to ~100 KB."""
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    if img.width > max_width:
+        img = img.resize((max_width, round(img.height * max_width / img.width)))
+    out = io.BytesIO()
+    img.save(out, format="WEBP", quality=quality, method=6)
+    return out.getvalue()
+
+
+def generate_illustration(title: str) -> tuple[bytes, str]:
+    """Generate an on-theme illustration for an article via OpenAI gpt-image-1,
+    re-encoded to WebP. Synchronous (blocking SDK); async callers wrap it in
+    run_in_threadpool. Returns (image_bytes, mime)."""
+    result = get_openai().images.generate(
+        model="gpt-image-1",
+        prompt=IMAGE_PROMPT.format(topic=title),
+        size="1536x1024",
+        quality=settings.image_quality,
+        n=1,
+    )
+    b64 = result.data[0].b64_json
+    if not b64:
+        raise ValueError("Image API returned no data")
+    return _to_webp(base64.b64decode(b64)), "image/webp"
 
 
 # Local development defaults to a SQLite file (zero setup). Point DATABASE_URL at
@@ -200,6 +260,21 @@ class ReadingListItem(Base):
     reflection: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     added_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ArticleImage(Base):
+    """A generated illustration for an article, cached by PMID (own table so the
+    articles table needs no migration). Bytes stored inline; served via
+    /articles/{pmid}/image."""
+
+    __tablename__ = "article_images"
+
+    pubmed_id: Mapped[str] = mapped_column(
+        ForeignKey("articles.pubmed_id", ondelete="CASCADE"), primary_key=True
+    )
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mime: Mapped[str] = mapped_column(String, nullable=False, default="image/png")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ArticleSummary(BaseModel):
@@ -799,6 +874,48 @@ def article_pdf_with_reflection(pubmed_id: str, body: PdfReflection, db: Session
     """Same PDF, but with a practitioner reflection included. The reflection is
     transient — passed at download time and never stored (free registered tier)."""
     return _article_pdf_response(pubmed_id, body.reflection, db)
+
+
+@app.get("/articles/{pubmed_id}/image")
+async def article_image(pubmed_id: str, db: Session = Depends(get_db)):
+    """Serve the article's AI illustration, generating (and caching) it on first
+    request. Returns 404 when no image exists and no OpenAI key is configured, so
+    the frontend falls back to its placeholder art. One image per PMID, forever."""
+    existing = db.get(ArticleImage, pubmed_id)
+    if existing is not None:
+        return Response(
+            content=existing.data,
+            media_type=existing.mime,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=404, detail="No illustration available")
+    art = db.get(Article, pubmed_id)
+    if art is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    try:
+        data, mime = await run_in_threadpool(generate_illustration, art.title)
+    except Exception as e:  # noqa: BLE001 — surface as 502, keep the placeholder
+        log.warning("image_gen_failed", pmid=pubmed_id, error=str(e))
+        raise HTTPException(status_code=502, detail="Illustration generation failed")
+    try:
+        db.add(
+            ArticleImage(
+                pubmed_id=pubmed_id,
+                data=data,
+                mime=mime,
+                created_at=dt.datetime.now(dt.timezone.utc),
+            )
+        )
+        db.commit()
+    except Exception:  # noqa: BLE001 — race: another request stored it first
+        db.rollback()
+    log.info("image_generated", pmid=pubmed_id, bytes=len(data))
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.post("/auth/register", response_model=UserResponse)
