@@ -18,16 +18,18 @@
   } from '$lib/api';
 
   let addOpen = $state(false);
+  let aboutOpen = $state(false);
 
   let card = $state<CardModel | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let dealing = $state(false);
 
-  // Reflection (premium): loaded per card once the session is known to be paid.
-  let reflection = $state<string | null>(null);
+  // Reflection text bound to the card flip (any signed-in user). For premium it's
+  // prefilled from the stored reflection and saved back; for registered it's a
+  // transient value included only in the downloaded PDF.
+  let reflectionText = $state('');
   let reflectionLoadedFor = $state<string | null>(null);
-  const reflectionReady = $derived(!!card && reflectionLoadedFor === card.pmid);
 
   $effect(() => {
     const c = card;
@@ -36,13 +38,10 @@
     let cancelled = false;
     getReflection(pmid)
       .then((r) => {
-        if (!cancelled) reflection = r.reflection;
+        if (!cancelled) reflectionText = r.reflection ?? '';
       })
-      .catch(() => {
-        if (!cancelled) reflection = null;
-      })
+      .catch(() => {})
       .finally(() => {
-        // Mark ready only AFTER the value is set, so the flip card mounts prefilled.
         if (!cancelled) reflectionLoadedFor = pmid;
       });
     return () => {
@@ -92,7 +91,7 @@
   }
 
   function resetReflection() {
-    reflection = null;
+    reflectionText = '';
     reflectionLoadedFor = null;
   }
 
@@ -128,7 +127,8 @@
   async function pdf() {
     if (card) {
       try {
-        await downloadPdf(card.pmid);
+        // Include the current reflection (transient for registered, stored for premium).
+        await downloadPdf(card.pmid, reflectionText.trim() || null);
       } catch (e) {
         error = (e as Error).message;
       }
@@ -155,10 +155,7 @@
 
 <div class="bar">
   <div>
-    <h1>Paper Heroes</h1>
-    <div class="sub">
-      ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.
-    </div>
+    <p class="sub">ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.</p>
   </div>
   <button class="deal" onclick={deal} disabled={dealing}>
     {dealing ? 'Dealing…' : 'Deal another card'}
@@ -175,7 +172,9 @@
       {/if}
       <div class="hint">
         {#if session.isPaid}
-          Premium — save this card to a deck.
+          Premium — add to a deck; your reflection is saved and in the PDF.
+        {:else if session.isSignedIn}
+          Registered — add a reflection; it’s included in your PDF.
         {:else}
           Refresh or “deal” for another card.
         {/if}
@@ -189,15 +188,10 @@
     {:else if error}
       <div class="msg err">Error: {error}</div>
     {:else if card}
-      {#if session.isPaid}
-        {#key `${card.pmid}:${reflectionReady}`}
+      {#if session.isSignedIn}
+        {#key card.pmid}
           <div in:fly={{ y: 18, duration: 320 }}>
-            <ReflectiveCard
-              {card}
-              pmid={card.pmid}
-              reflection={reflectionReady ? reflection : null}
-              onreflection={(t) => (reflection = t)}
-            />
+            <ReflectiveCard {card} pmid={card.pmid} bind:text={reflectionText} canSave={session.isPaid} />
           </div>
         {/key}
       {:else}
@@ -226,6 +220,8 @@
 </div>
 
 <footer class="foot">
+  <button class="contact-link" onclick={() => (aboutOpen = true)}>About</button>
+  <span class="foot-sep">·</span>
   <button class="contact-link" onclick={openContact}>Contact us</button>
 </footer>
 
@@ -275,6 +271,37 @@
   </div>
 {/if}
 
+{#if aboutOpen}
+  <div
+    class="overlay"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) aboutOpen = false;
+    }}
+  >
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="About Paper Heroes">
+      <h3>About Paper Heroes</h3>
+      <p class="note">
+        Paper Heroes deals you <strong>one recently-published medical paper at random</strong>,
+        drawn from a curated set of journals over the last 30 days. Each paper is summarised and
+        critically appraised by AI and shown as a comic-book <strong>trading card</strong> — with an
+        AI-generated hero (for beneficial findings) or villain (for harms) illustrating the topic.
+      </p>
+      <p class="note">
+        Registered practitioners can add a reflection to the downloadable PDF. Premium members can
+        save cards into <strong>Card Decks</strong> and keep a reflection on the back of each card.
+      </p>
+      <p class="note caveat-note">
+        ⚠ AI-generated summaries, appraisals and illustrations can be wrong — always verify against
+        the original article before making any clinical decision.
+      </p>
+      <div class="dialog-actions">
+        <button class="mbtn" onclick={() => (aboutOpen = false)}>Close</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if card}
   <AddToDeckModal open={addOpen} pmid={card.pmid} onclose={() => (addOpen = false)} />
 {/if}
@@ -291,19 +318,15 @@
     gap: 16px;
     margin-bottom: 22px;
   }
-  .bar h1 {
-    font-size: 40px;
-    letter-spacing: -1.2px;
-    line-height: 1;
-    font-weight: 800;
-    color: var(--ink);
-  }
+  /* The tagline now leads the page (the brand lives in the top nav). */
   .sub {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    color: var(--muted-2);
-    margin-top: 6px;
+    font-size: 16px;
+    line-height: 1.55;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    color: var(--ink);
+    max-width: 640px;
   }
   .deal {
     font-size: 23px;
@@ -427,8 +450,8 @@
       align-items: stretch;
       gap: 12px;
     }
-    .bar h1 {
-      font-size: 30px;
+    .sub {
+      font-size: 14px;
     }
     .deal {
       text-align: center;
@@ -483,8 +506,15 @@
     color: var(--ink);
     text-decoration: underline;
   }
+  .foot-sep {
+    color: var(--muted-2);
+    font-size: 11px;
+  }
+  .caveat-note {
+    color: var(--warn);
+  }
 
-  /* contact modal */
+  /* contact + about modal */
   .overlay {
     position: fixed;
     inset: 0;

@@ -24,7 +24,6 @@
 
   <nav>
     {#if session.isPaid}
-      <a class="navlink" href="{base}/">Home</a>
       <a class="navlink" href="{base}/decks">My Decks</a>
     {/if}
 
@@ -78,11 +77,23 @@
     letter-spacing: -0.5px;
     color: var(--ink);
     text-decoration: none;
+    white-space: nowrap;
   }
   nav {
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+  @media (max-width: 560px) {
+    .topbar {
+      gap: 8px;
+    }
+    .brand {
+      font-size: 15px;
+    }
+    nav {
+      gap: 7px;
+    }
   }
   .navlink {
     font-family: 'JetBrains Mono', monospace;
