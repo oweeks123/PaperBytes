@@ -25,6 +25,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Qu
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import (
     JSON,
@@ -270,6 +271,63 @@ class ReadingListItem(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class Deck(Base):
+    """A paid user's named collection of cards ("Card Deck"). Cards are held via
+    DeckCard rows; the reflection is NOT here — it is shared per (user, article)
+    in CardReflection, so the same paper carries one reflection across every deck."""
+
+    __tablename__ = "decks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_email: Mapped[str] = mapped_column(
+        ForeignKey("users.email", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    cards: Mapped[list["DeckCard"]] = relationship(
+        back_populates="deck",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="DeckCard.added_at",
+    )
+
+
+class DeckCard(Base):
+    """Membership of an article in a deck (no reflection — see CardReflection)."""
+
+    __tablename__ = "deck_cards"
+    __table_args__ = (UniqueConstraint("deck_id", "pubmed_id", name="uq_deck_article"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    deck_id: Mapped[int] = mapped_column(ForeignKey("decks.id", ondelete="CASCADE"), index=True)
+    pubmed_id: Mapped[str] = mapped_column(
+        ForeignKey("articles.pubmed_id", ondelete="CASCADE"), index=True
+    )
+    added_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    deck: Mapped["Deck"] = relationship(back_populates="cards")
+
+
+class CardReflection(Base):
+    """A paid user's reflection for one article, shared across all their decks
+    (the "back of the card"). One row per (user, article)."""
+
+    __tablename__ = "card_reflections"
+    __table_args__ = (UniqueConstraint("user_email", "pubmed_id", name="uq_user_card_reflection"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_email: Mapped[str] = mapped_column(
+        ForeignKey("users.email", ondelete="CASCADE"), index=True
+    )
+    pubmed_id: Mapped[str] = mapped_column(
+        ForeignKey("articles.pubmed_id", ondelete="CASCADE"), index=True
+    )
+    reflection: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ArticleImage(Base):
     """A generated illustration for an article, cached by PMID (own table so the
     articles table needs no migration). Bytes stored inline; served via
@@ -415,6 +473,54 @@ class ReadingListItemResponse(BaseModel):
     appraisal: Optional[CriticalAppraisal] = None
     reflection: Optional[str] = None
     added_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+# --- Card Decks (paid tier) ------------------------------------------------
+class DeckCreate(BaseModel):
+    name: str
+
+
+class DeckRename(BaseModel):
+    name: str
+
+
+class DeckCardAdd(BaseModel):
+    pubmed_id: str
+
+
+class ReflectionSet(BaseModel):
+    reflection: Optional[str] = None
+
+
+class DeckCardResponse(BaseModel):
+    pubmed_id: str
+    title: str
+    journal: Optional[str] = None
+    pubmed_url: str
+    summary: str
+    specialties: list[str]
+    appraisal: Optional[CriticalAppraisal] = None
+    image_url: str
+    has_image: bool
+    reflection: Optional[str] = None  # shared per (user, article) across decks
+    added_at: Optional[str] = None
+
+
+class DeckSummary(BaseModel):
+    id: int
+    name: str
+    card_count: int
+    cover_pmids: list[str]  # first few cards, for the deck-pile preview
+    updated_at: Optional[str] = None
+
+
+class DeckResponse(BaseModel):
+    id: int
+    name: str
+    card_count: int
+    cards: list[DeckCardResponse]
+    created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
 
@@ -636,12 +742,26 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="PaperBytes", lifespan=lifespan)
 
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles that falls back to index.html for unknown paths, so the SPA's
+    client-side routes (e.g. /ui/decks) resolve on a hard refresh or deep link
+    instead of 404ing. Real asset 404s (e.g. /ui/_app/missing.js) still 404."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and not path.startswith("_app/"):
+                return await super().get_response("index.html", scope)
+            raise
+
+
 # SvelteKit frontend, built (adapter-static, base /ui) to frontend/build and served
 # same-origin so it can call the API without CORS. Browse it at /ui/. Run
 # `npm --prefix frontend run build` to (re)generate it; skipped if absent.
 _WEB_DIR = Path(__file__).parent / "frontend" / "build"
 if _WEB_DIR.is_dir():
-    app.mount("/ui", StaticFiles(directory=_WEB_DIR, html=True), name="ui")
+    app.mount("/ui", SPAStaticFiles(directory=_WEB_DIR, html=True), name="ui")
 
 
 def _health_payload() -> dict:
@@ -1170,6 +1290,211 @@ def remove_from_reading_list(
         db.delete(item)
         db.commit()
     return {"status": "removed", "pubmed_id": pubmed_id}
+
+
+# --- Card Decks (paid tier) ------------------------------------------------
+def _get_owned_deck(db: Session, user: User, deck_id: int) -> Deck:
+    deck = db.get(Deck, deck_id)
+    if deck is None or deck.user_email != user.email:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return deck
+
+
+def _reflections_for(db: Session, user_email: str, pmids: list[str]) -> dict[str, str]:
+    if not pmids:
+        return {}
+    rows = db.scalars(
+        select(CardReflection).where(
+            CardReflection.user_email == user_email, CardReflection.pubmed_id.in_(pmids)
+        )
+    ).all()
+    return {r.pubmed_id: r.reflection for r in rows}
+
+
+def _images_present(db: Session, pmids: list[str]) -> set[str]:
+    if not pmids:
+        return set()
+    return set(
+        db.scalars(select(ArticleImage.pubmed_id).where(ArticleImage.pubmed_id.in_(pmids))).all()
+    )
+
+
+def _deck_card_response(
+    art: Article, reflection: Optional[str], added_at: Optional[dt.datetime], has_image: bool
+) -> DeckCardResponse:
+    return DeckCardResponse(
+        pubmed_id=art.pubmed_id,
+        title=art.title,
+        journal=art.journal or None,
+        pubmed_url=art.pubmed_url,
+        summary=art.ai_summary,
+        specialties=[s.name for s in art.specialties],
+        appraisal=CriticalAppraisal(**art.appraisal) if art.appraisal else None,
+        image_url=f"/articles/{art.pubmed_id}/image",
+        has_image=has_image,
+        reflection=reflection,
+        added_at=added_at.isoformat() if added_at else None,
+    )
+
+
+def _deck_response(db: Session, user: User, deck: Deck) -> DeckResponse:
+    pmids = [c.pubmed_id for c in deck.cards]
+    reflections = _reflections_for(db, user.email, pmids)
+    images = _images_present(db, pmids)
+    arts = (
+        {a.pubmed_id: a for a in db.scalars(select(Article).where(Article.pubmed_id.in_(pmids))).all()}
+        if pmids
+        else {}
+    )
+    cards = []
+    for c in deck.cards:
+        art = arts.get(c.pubmed_id)
+        if art is None:  # article purged — skip rather than 500 the deck
+            continue
+        cards.append(
+            _deck_card_response(art, reflections.get(c.pubmed_id), c.added_at, c.pubmed_id in images)
+        )
+    return DeckResponse(
+        id=deck.id,
+        name=deck.name,
+        card_count=len(cards),
+        cards=cards,
+        created_at=deck.created_at.isoformat() if deck.created_at else None,
+        updated_at=deck.updated_at.isoformat() if deck.updated_at else None,
+    )
+
+
+def _validate_deck_name(name: Optional[str]) -> str:
+    cleaned = (name or "").strip()
+    if not (1 <= len(cleaned) <= 120):
+        raise HTTPException(status_code=400, detail="Deck name must be 1–120 characters")
+    return cleaned
+
+
+@app.post("/decks", response_model=DeckResponse)
+def create_deck(body: DeckCreate, user: User = Depends(require_paid), db: Session = Depends(get_db)):
+    now = dt.datetime.now(dt.timezone.utc)
+    deck = Deck(user_email=user.email, name=_validate_deck_name(body.name), created_at=now, updated_at=now)
+    db.add(deck)
+    db.commit()
+    return _deck_response(db, user, deck)
+
+
+@app.get("/decks", response_model=list[DeckSummary])
+def list_decks(user: User = Depends(require_paid), db: Session = Depends(get_db)):
+    """Deck summaries for the 'My Decks' page (name, count, a few cover PMIDs)."""
+    decks = db.scalars(
+        select(Deck).where(Deck.user_email == user.email).order_by(Deck.updated_at.desc())
+    ).all()
+    out = []
+    for d in decks:
+        pmids = [c.pubmed_id for c in d.cards]
+        out.append(
+            DeckSummary(
+                id=d.id,
+                name=d.name,
+                card_count=len(pmids),
+                cover_pmids=pmids[:4],
+                updated_at=d.updated_at.isoformat() if d.updated_at else None,
+            )
+        )
+    return out
+
+
+@app.get("/decks/{deck_id}", response_model=DeckResponse)
+def get_deck(deck_id: int, user: User = Depends(require_paid), db: Session = Depends(get_db)):
+    return _deck_response(db, user, _get_owned_deck(db, user, deck_id))
+
+
+@app.patch("/decks/{deck_id}", response_model=DeckResponse)
+def rename_deck(
+    deck_id: int, body: DeckRename, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    deck = _get_owned_deck(db, user, deck_id)
+    deck.name = _validate_deck_name(body.name)
+    deck.updated_at = dt.datetime.now(dt.timezone.utc)
+    db.commit()
+    return _deck_response(db, user, deck)
+
+
+@app.delete("/decks/{deck_id}")
+def delete_deck(deck_id: int, user: User = Depends(require_paid), db: Session = Depends(get_db)):
+    db.delete(_get_owned_deck(db, user, deck_id))
+    db.commit()
+    return {"status": "deleted", "deck_id": deck_id}
+
+
+@app.post("/decks/{deck_id}/cards", response_model=DeckCardResponse)
+def add_card_to_deck(
+    deck_id: int, body: DeckCardAdd, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    """Add a card to a deck (idempotent). The article must already exist (i.e. it
+    has been opened via /random at least once)."""
+    deck = _get_owned_deck(db, user, deck_id)
+    art = db.get(Article, body.pubmed_id)
+    if art is None:
+        raise HTTPException(status_code=404, detail="Article not found — open it first")
+    now = dt.datetime.now(dt.timezone.utc)
+    existing = db.scalar(
+        select(DeckCard).where(DeckCard.deck_id == deck.id, DeckCard.pubmed_id == body.pubmed_id)
+    )
+    if existing is None:
+        db.add(DeckCard(deck_id=deck.id, pubmed_id=body.pubmed_id, added_at=now))
+        deck.updated_at = now
+        db.commit()
+        added_at = now
+    else:
+        added_at = existing.added_at
+    reflection = db.scalar(
+        select(CardReflection.reflection).where(
+            CardReflection.user_email == user.email, CardReflection.pubmed_id == body.pubmed_id
+        )
+    )
+    return _deck_card_response(art, reflection, added_at, db.get(ArticleImage, body.pubmed_id) is not None)
+
+
+@app.delete("/decks/{deck_id}/cards/{pubmed_id}")
+def remove_card_from_deck(
+    deck_id: int, pubmed_id: str, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    deck = _get_owned_deck(db, user, deck_id)
+    item = db.scalar(
+        select(DeckCard).where(DeckCard.deck_id == deck.id, DeckCard.pubmed_id == pubmed_id)
+    )
+    if item is not None:
+        db.delete(item)
+        deck.updated_at = dt.datetime.now(dt.timezone.utc)
+        db.commit()
+    return {"status": "removed", "deck_id": deck_id, "pubmed_id": pubmed_id}
+
+
+@app.put("/cards/{pubmed_id}/reflection")
+def set_card_reflection(
+    pubmed_id: str, body: ReflectionSet, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    """Set/replace the shared reflection for a card (its 'back'). Applies across
+    every deck the card sits in. Empty text clears it."""
+    if db.get(Article, pubmed_id) is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    text = (body.reflection or "").strip()
+    row = db.scalar(
+        select(CardReflection).where(
+            CardReflection.user_email == user.email, CardReflection.pubmed_id == pubmed_id
+        )
+    )
+    now = dt.datetime.now(dt.timezone.utc)
+    if not text:
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        return {"pubmed_id": pubmed_id, "reflection": None}
+    if row is None:
+        db.add(CardReflection(user_email=user.email, pubmed_id=pubmed_id, reflection=text, updated_at=now))
+    else:
+        row.reflection = text
+        row.updated_at = now
+    db.commit()
+    return {"pubmed_id": pubmed_id, "reflection": text}
 
 
 @app.get("/articles")
