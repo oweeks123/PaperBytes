@@ -2,10 +2,20 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import '../app.css';
+  import { base } from '$app/paths';
   import EvidenceCard from '$lib/components/EvidenceCard.svelte';
+  import ReflectiveCard from '$lib/components/ReflectiveCard.svelte';
   import AddToDeckModal from '$lib/components/AddToDeckModal.svelte';
   import { session } from '$lib/session.svelte';
-  import { getRandom, toCard, downloadPdf, sendContact, type CardModel } from '$lib/api';
+  import {
+    getRandom,
+    getCard,
+    getReflection,
+    toCard,
+    downloadPdf,
+    sendContact,
+    type CardModel
+  } from '$lib/api';
 
   let addOpen = $state(false);
 
@@ -13,6 +23,32 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let dealing = $state(false);
+
+  // Reflection (premium): loaded per card once the session is known to be paid.
+  let reflection = $state<string | null>(null);
+  let reflectionLoadedFor = $state<string | null>(null);
+  const reflectionReady = $derived(!!card && reflectionLoadedFor === card.pmid);
+
+  $effect(() => {
+    const c = card;
+    if (!session.isPaid || !c || reflectionLoadedFor === c.pmid) return;
+    const pmid = c.pmid;
+    let cancelled = false;
+    getReflection(pmid)
+      .then((r) => {
+        if (!cancelled) reflection = r.reflection;
+      })
+      .catch(() => {
+        if (!cancelled) reflection = null;
+      })
+      .finally(() => {
+        // Mark ready only AFTER the value is set, so the flip card mounts prefilled.
+        if (!cancelled) reflectionLoadedFor = pmid;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   // Contact modal
   let contactOpen = $state(false);
@@ -55,16 +91,37 @@
     }
   }
 
+  function resetReflection() {
+    reflection = null;
+    reflectionLoadedFor = null;
+  }
+
   async function deal() {
     dealing = true;
     error = null;
     try {
+      resetReflection();
       card = toCard(await getRandom(30));
+      // Drop any ?pmid= so a refresh deals a fresh random card again.
+      if (typeof history !== 'undefined') history.replaceState(null, '', `${base}/`);
     } catch (e) {
       error = (e as Error).message;
     } finally {
       loading = false;
       dealing = false;
+    }
+  }
+
+  // Open a specific, already-analysed card (deep link from a deck: /ui/?pmid=…).
+  async function openPmid(pmid: string) {
+    error = null;
+    try {
+      resetReflection();
+      card = toCard(await getCard(pmid));
+    } catch (e) {
+      error = (e as Error).message;
+    } finally {
+      loading = false;
     }
   }
 
@@ -80,7 +137,9 @@
 
   onMount(() => {
     if (location.hash === '#contact') openContact();
-    deal();
+    const pmid = new URL(location.href).searchParams.get('pmid');
+    if (pmid) openPmid(pmid);
+    else deal();
     // Request an ad into the AdSense unit. The loader lives in app.html; if it
     // hasn't finished loading yet, push() queues into the adsbygoogle array and
     // runs once it does. Wrapped so an ad blocker or failed load can never break
@@ -130,11 +189,24 @@
     {:else if error}
       <div class="msg err">Error: {error}</div>
     {:else if card}
-      {#key card.pmid}
-        <div in:fly={{ y: 18, duration: 320 }}>
-          <EvidenceCard {card} />
-        </div>
-      {/key}
+      {#if session.isPaid}
+        {#key `${card.pmid}:${reflectionReady}`}
+          <div in:fly={{ y: 18, duration: 320 }}>
+            <ReflectiveCard
+              {card}
+              pmid={card.pmid}
+              reflection={reflectionReady ? reflection : null}
+              onreflection={(t) => (reflection = t)}
+            />
+          </div>
+        {/key}
+      {:else}
+        {#key card.pmid}
+          <div in:fly={{ y: 18, duration: 320 }}>
+            <EvidenceCard {card} />
+          </div>
+        {/key}
+      {/if}
     {/if}
   </div>
 

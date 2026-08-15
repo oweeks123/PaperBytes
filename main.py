@@ -1106,6 +1106,17 @@ def article_pdf_with_reflection(pubmed_id: str, body: PdfReflection, db: Session
     return _article_pdf_response(pubmed_id, body.reflection, db)
 
 
+@app.get("/articles/{pubmed_id}/card", response_model=RandomArticleResponse)
+def get_article_card(pubmed_id: str, db: Session = Depends(get_db)):
+    """Return one specific, already-analysed article in the same shape as /random.
+    The home page uses this to open a chosen card (e.g. from a deck) via ?pmid=…,
+    which is a fresh page load — a new hit — and served from cache (no AI spend)."""
+    art = db.get(Article, pubmed_id)
+    if art is None or art.appraisal is None:
+        raise HTTPException(status_code=404, detail="Card not found or not yet analysed")
+    return _random_response(art, cached=True)
+
+
 @app.get("/articles/{pubmed_id}/image")
 async def article_image(pubmed_id: str, db: Session = Depends(get_db)):
     """Serve the article's AI illustration, generating (and caching) it on first
@@ -1466,6 +1477,20 @@ def remove_card_from_deck(
         deck.updated_at = dt.datetime.now(dt.timezone.utc)
         db.commit()
     return {"status": "removed", "deck_id": deck_id, "pubmed_id": pubmed_id}
+
+
+@app.get("/cards/{pubmed_id}/reflection")
+def get_card_reflection(
+    pubmed_id: str, user: User = Depends(require_paid), db: Session = Depends(get_db)
+):
+    """The current paid user's stored reflection for a card (or null). Used by the
+    home-page card flip to prefill the reflection when a card is opened."""
+    reflection = db.scalar(
+        select(CardReflection.reflection).where(
+            CardReflection.user_email == user.email, CardReflection.pubmed_id == pubmed_id
+        )
+    )
+    return {"pubmed_id": pubmed_id, "reflection": reflection}
 
 
 @app.put("/cards/{pubmed_id}/reflection")

@@ -4,32 +4,21 @@
   import { goto } from '$app/navigation';
   import { session } from '$lib/session.svelte';
   import { ui } from '$lib/ui.svelte';
-  import {
-    getDeck,
-    renameDeck,
-    deleteDeck,
-    removeCardFromDeck,
-    type Deck
-  } from '$lib/api';
-  import ReflectiveCard from '$lib/components/ReflectiveCard.svelte';
+  import { getDeck, renameDeck, deleteDeck, removeCardFromDeck, type Deck } from '$lib/api';
 
   let deck = $state<Deck | null>(null);
   let error = $state<string | null>(null);
-  let selected = $state<string | null>(null);
   let editingName = $state(false);
   let nameDraft = $state('');
   let loadedId = $state<number | null>(null);
 
   const deckId = $derived(Number($page.params.id));
-  const selectedCard = $derived(deck?.cards.find((c) => c.pubmed_id === selected) ?? null);
 
   async function load() {
     error = null;
     deck = null;
     try {
-      const d = await getDeck(deckId);
-      deck = d;
-      selected = d.cards[0]?.pubmed_id ?? null;
+      deck = await getDeck(deckId);
     } catch (e) {
       error = (e as Error).message;
     }
@@ -53,18 +42,12 @@
     editingName = false;
   }
 
-  async function removeSelected() {
-    if (!deck || !selected) return;
-    const pmid = selected;
+  async function removeCard(pmid: string) {
+    if (!deck) return;
+    if (!confirm('Remove this card from the deck? Your reflection stays in your account.')) return;
     await removeCardFromDeck(deck.id, pmid);
     deck.cards = deck.cards.filter((c) => c.pubmed_id !== pmid);
     deck.card_count = deck.cards.length;
-    selected = deck.cards[0]?.pubmed_id ?? null;
-  }
-
-  function onReflection(pmid: string, text: string | null) {
-    if (!deck) return;
-    deck.cards = deck.cards.map((c) => (c.pubmed_id === pmid ? { ...c, reflection: text } : c));
   }
 
   async function removeDeck() {
@@ -85,7 +68,7 @@
 {:else if !session.isSignedIn}
   <div class="msg">Please <button class="link" onclick={() => ui.openAuth()}>sign in</button> to view decks.</div>
 {:else if !session.isPaid}
-  <div class="msg">Card Decks are a Premium feature. <button class="link" onclick={() => session.upgrade()}>Upgrade</button>.</div>
+  <div class="msg">Card Decks are a Premium feature. <a class="link" href="{base}/pricing">See plans</a>.</div>
 {:else if error}
   <div class="msg err">{error}</div>
 {:else if deck}
@@ -120,41 +103,36 @@
       <strong>“Add to deck”</strong>.
     </div>
   {:else}
-    <!-- Scrollable strip of cards: image + title. Click to open. -->
-    <div class="strip" role="listbox" aria-label="Cards in this deck">
+    <p class="stripnote">Tap a card to open it in a new tab.</p>
+    <!-- Scrollable strip of cards (image + title). Each opens the home page for that
+         card in a new tab — a fresh page load, so it counts as a new visit. -->
+    <div class="strip">
       {#each deck.cards as c (c.pubmed_id)}
-        <button
-          class="thumb"
-          class:active={c.pubmed_id === selected}
-          role="option"
-          aria-selected={c.pubmed_id === selected}
-          onclick={() => (selected = c.pubmed_id)}
-        >
-          <div class="thumb-img">
-            <img
-              src={c.image_url}
-              alt=""
-              loading="lazy"
-              onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-            />
-            {#if c.reflection}<span class="badge" title="Has a reflection">📝</span>{/if}
-          </div>
-          <div class="thumb-title">{c.title}</div>
-        </button>
+        <div class="thumb">
+          <a
+            class="thumb-link"
+            href="{base}/?pmid={encodeURIComponent(c.pubmed_id)}"
+            target="_blank"
+            rel="noopener"
+          >
+            <div class="thumb-img">
+              <img
+                src={c.image_url}
+                alt=""
+                loading="lazy"
+                onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
+              />
+              {#if c.reflection}<span class="badge" title="Has a reflection">📝</span>{/if}
+              <span class="open-hint">Open ↗</span>
+            </div>
+            <div class="thumb-title">{c.title}</div>
+          </a>
+          <button class="thumb-rm" title="Remove from deck" onclick={() => removeCard(c.pubmed_id)}
+            >✕</button
+          >
+        </div>
       {/each}
     </div>
-
-    {#if selectedCard}
-      {#key selectedCard.pubmed_id}
-        <div class="opened">
-          <ReflectiveCard
-            card={selectedCard}
-            onremove={removeSelected}
-            onreflection={(t) => onReflection(selectedCard.pubmed_id, t)}
-          />
-        </div>
-      {/key}
-    {/if}
   {/if}
 {/if}
 
@@ -226,6 +204,14 @@
     color: var(--ink);
   }
 
+  .stripnote {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-2);
+    margin-bottom: 8px;
+  }
   .strip {
     display: flex;
     gap: 14px;
@@ -238,11 +224,12 @@
     scroll-snap-align: start;
     flex: 0 0 auto;
     width: 148px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    text-align: left;
+    position: relative;
+  }
+  .thumb-link {
+    display: block;
+    text-decoration: none;
+    color: var(--ink);
   }
   .thumb-img {
     position: relative;
@@ -255,17 +242,30 @@
     box-shadow: 0 5px 0 var(--ink);
     transition: transform 0.1s ease;
   }
-  .thumb.active .thumb-img {
-    outline: 4px solid var(--grape);
-    outline-offset: 2px;
-  }
-  .thumb:hover .thumb-img {
+  .thumb-link:hover .thumb-img {
     transform: translateY(-3px);
   }
   .thumb-img img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  .open-hint {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    background: var(--ink);
+    color: #fff;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    padding: 3px 6px;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+  }
+  .thumb-link:hover .open-hint {
+    opacity: 1;
   }
   .badge {
     position: absolute;
@@ -277,6 +277,21 @@
     font-size: 12px;
     padding: 1px 5px;
   }
+  .thumb-rm {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+    background: #fff;
+    color: var(--bad);
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    box-shadow: 0 2px 0 var(--ink);
+  }
   .thumb-title {
     font-size: 12px;
     font-weight: 700;
@@ -287,10 +302,6 @@
     line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-  .opened {
-    max-width: 880px;
-    margin-top: 8px;
   }
   .empty {
     border: 2px dashed var(--muted-2);
