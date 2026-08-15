@@ -3,7 +3,11 @@
   import { fly } from 'svelte/transition';
   import '../app.css';
   import EvidenceCard from '$lib/components/EvidenceCard.svelte';
+  import AddToDeckModal from '$lib/components/AddToDeckModal.svelte';
+  import { session } from '$lib/session.svelte';
   import { getRandom, toCard, downloadPdf, sendContact, type CardModel } from '$lib/api';
+
+  let addOpen = $state(false);
 
   let card = $state<CardModel | null>(null);
   let loading = $state(true);
@@ -107,7 +111,16 @@
     {#if card && !loading}
       <a class="primary" href={card.url} target="_blank" rel="noreferrer">Read on PubMed</a>
       <button onclick={pdf}>Download summary (PDF)</button>
-      <div class="hint">Free tier — refresh or “deal” for another card.</div>
+      {#if session.isPaid}
+        <button class="deckadd" onclick={() => (addOpen = true)}>＋ Add to deck</button>
+      {/if}
+      <div class="hint">
+        {#if session.isPaid}
+          Premium — save this card to a deck.
+        {:else}
+          Refresh or “deal” for another card.
+        {/if}
+      </div>
     {/if}
   </div>
 
@@ -190,7 +203,15 @@
   </div>
 {/if}
 
+{#if card}
+  <AddToDeckModal open={addOpen} pmid={card.pmid} onclose={() => (addOpen = false)} />
+{/if}
+
 <style>
+  .deckadd {
+    background: var(--grape) !important;
+    color: #fff !important;
+  }
   .bar {
     display: flex;
     align-items: center;
