@@ -18,6 +18,7 @@
   } from '$lib/api';
 
   let addOpen = $state(false);
+  let aboutOpen = $state(false);
 
   let card = $state<CardModel | null>(null);
   let loading = $state(true);
@@ -222,6 +223,8 @@
 </div>
 
 <footer class="foot">
+  <button class="contact-link" onclick={() => (aboutOpen = true)}>About</button>
+  <span class="foot-sep">·</span>
   <button class="contact-link" onclick={openContact}>Contact us</button>
 </footer>
 
@@ -267,6 +270,37 @@
           <button class="mbtn ghost" onclick={closeContact}>Cancel</button>
         </div>
       {/if}
+    </div>
+  </div>
+{/if}
+
+{#if aboutOpen}
+  <div
+    class="overlay"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) aboutOpen = false;
+    }}
+  >
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="About Paper Heroes">
+      <h3>About Paper Heroes</h3>
+      <p class="note">
+        Paper Heroes deals you <strong>one recently-published medical paper at random</strong>,
+        drawn from a curated set of journals over the last 30 days. Each paper is summarised and
+        critically appraised by AI and shown as a comic-book <strong>trading card</strong> — with an
+        AI-generated hero (for beneficial findings) or villain (for harms) illustrating the topic.
+      </p>
+      <p class="note">
+        Registered practitioners can add a reflection to the downloadable PDF. Premium members can
+        save cards into <strong>Card Decks</strong> and keep a reflection on the back of each card.
+      </p>
+      <p class="note caveat-note">
+        ⚠ AI-generated summaries, appraisals and illustrations can be wrong — always verify against
+        the original article before making any clinical decision.
+      </p>
+      <div class="dialog-actions">
+        <button class="mbtn" onclick={() => (aboutOpen = false)}>Close</button>
+      </div>
     </div>
   </div>
 {/if}
@@ -479,8 +513,15 @@
     color: var(--ink);
     text-decoration: underline;
   }
+  .foot-sep {
+    color: var(--muted-2);
+    font-size: 11px;
+  }
+  .caveat-note {
+    color: var(--warn);
+  }
 
-  /* contact modal */
+  /* contact + about modal */
   .overlay {
     position: fixed;
     inset: 0;
