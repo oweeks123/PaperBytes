@@ -37,13 +37,19 @@
     </div>
     <div class="face back" aria-hidden={!flipped}>
       <div class="backinner">
-        <div class="btag">Reflection</div>
+        <div class="bhead">
+          <div class="btag">Reflection</div>
+          <div class="bhead-actions">
+            {#if canSave}
+              {#if saved}<span class="ok">Saved ✓</span>{/if}
+              <button class="mbtn" onclick={save} disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+            {/if}
+            <button class="mbtn ghost" onclick={() => (flipped = false)}>↩ Flip to front</button>
+          </div>
+        </div>
         <div class="btitle">{card.title}</div>
-        <textarea
-          bind:value={text}
-          rows="9"
-          placeholder="What did you take from this paper? How might it change your practice?"
-        ></textarea>
         <p class="bnote">
           {#if canSave}
             Saved to your account, shared across your decks — and added to your PDF.
@@ -51,30 +57,21 @@
             Added to your PDF when you download it. Not saved (clears when you leave).
           {/if}
         </p>
-        <div class="bactions">
-          {#if canSave}
-            <button class="mbtn" onclick={save} disabled={busy}>
-              {busy ? 'Saving…' : 'Save reflection'}
-            </button>
-            {#if saved}<span class="ok">Saved ✓</span>{/if}
-          {/if}
-          <button class="mbtn ghost" onclick={() => (flipped = false)}>↩ Flip to front</button>
-        </div>
+        <textarea
+          bind:value={text}
+          placeholder="What did you take from this paper? How might it change your practice?"
+        ></textarea>
       </div>
     </div>
   </div>
 
-  <div class="cardbar">
-    <button class="flipbtn" onclick={() => (flipped = !flipped)}>
-      {#if flipped}
-        ↩ Back to card
-      {:else if text.trim()}
-        📝 View reflection
-      {:else}
-        ＋ Add reflection
-      {/if}
-    </button>
-  </div>
+  {#if !flipped}
+    <div class="cardbar">
+      <button class="flipbtn" onclick={() => (flipped = true)}>
+        {text.trim() ? '📝 View reflection' : '＋ Add reflection'}
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -113,8 +110,18 @@
     box-shadow: 0 8px 0 var(--ink);
     padding: 22px;
   }
+  .bhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .bhead-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   .btag {
-    align-self: flex-start;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.16em;
@@ -127,15 +134,16 @@
   }
   .btitle {
     font-weight: 800;
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.25;
-    margin: 12px 0 12px;
+    margin: 12px 0 10px;
   }
   textarea {
+    /* Fills the writing surface below the controls (which sit at the top). */
     flex: 1;
-    min-height: 160px;
+    min-height: 200px;
     width: 100%;
-    resize: vertical;
+    resize: none;
     padding: 13px;
     border: 2px solid var(--ink);
     border-radius: 14px;
@@ -147,14 +155,7 @@
   .bnote {
     font-size: 12px;
     color: var(--muted);
-    margin-top: 10px;
-  }
-  .bactions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 12px;
-    flex-wrap: wrap;
+    margin-bottom: 12px;
   }
   .ok {
     color: var(--good);
