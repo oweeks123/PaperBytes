@@ -5,17 +5,16 @@
   let {
     card,
     pmid,
-    reflection = null,
-    onreflection
+    text = $bindable(''),
+    canSave = false
   }: {
     card: CardModel;
     pmid: string;
-    reflection?: string | null;
-    onreflection?: (text: string | null) => void;
+    text?: string;
+    canSave?: boolean; // premium: reflection is stored; otherwise it's PDF-only (transient)
   } = $props();
 
   let flipped = $state(false);
-  let text = $state(reflection ?? '');
   let busy = $state(false);
   let saved = $state(false);
 
@@ -23,8 +22,7 @@
     busy = true;
     saved = false;
     try {
-      const r = await setReflection(pmid, text);
-      onreflection?.(r.reflection);
+      await setReflection(pmid, text);
       saved = true;
     } finally {
       busy = false;
@@ -44,14 +42,23 @@
         <textarea
           bind:value={text}
           rows="9"
-          placeholder="What did you take from this paper? How might it change your practice? (saved to your account and shared across your decks)"
+          placeholder="What did you take from this paper? How might it change your practice?"
         ></textarea>
+        <p class="bnote">
+          {#if canSave}
+            Saved to your account, shared across your decks — and added to your PDF.
+          {:else}
+            Added to your PDF when you download it. Not saved (clears when you leave).
+          {/if}
+        </p>
         <div class="bactions">
-          <button class="mbtn" onclick={save} disabled={busy}>
-            {busy ? 'Saving…' : 'Save reflection'}
-          </button>
+          {#if canSave}
+            <button class="mbtn" onclick={save} disabled={busy}>
+              {busy ? 'Saving…' : 'Save reflection'}
+            </button>
+            {#if saved}<span class="ok">Saved ✓</span>{/if}
+          {/if}
           <button class="mbtn ghost" onclick={() => (flipped = false)}>↩ Flip to front</button>
-          {#if saved}<span class="ok">Saved ✓</span>{/if}
         </div>
       </div>
     </div>
@@ -137,11 +144,16 @@
     line-height: 1.5;
     background: #fff;
   }
+  .bnote {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
   .bactions {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 14px;
+    margin-top: 12px;
     flex-wrap: wrap;
   }
   .ok {

@@ -24,10 +24,11 @@
   let error = $state<string | null>(null);
   let dealing = $state(false);
 
-  // Reflection (premium): loaded per card once the session is known to be paid.
-  let reflection = $state<string | null>(null);
+  // Reflection text bound to the card flip (any signed-in user). For premium it's
+  // prefilled from the stored reflection and saved back; for registered it's a
+  // transient value included only in the downloaded PDF.
+  let reflectionText = $state('');
   let reflectionLoadedFor = $state<string | null>(null);
-  const reflectionReady = $derived(!!card && reflectionLoadedFor === card.pmid);
 
   $effect(() => {
     const c = card;
@@ -36,13 +37,10 @@
     let cancelled = false;
     getReflection(pmid)
       .then((r) => {
-        if (!cancelled) reflection = r.reflection;
+        if (!cancelled) reflectionText = r.reflection ?? '';
       })
-      .catch(() => {
-        if (!cancelled) reflection = null;
-      })
+      .catch(() => {})
       .finally(() => {
-        // Mark ready only AFTER the value is set, so the flip card mounts prefilled.
         if (!cancelled) reflectionLoadedFor = pmid;
       });
     return () => {
@@ -92,7 +90,7 @@
   }
 
   function resetReflection() {
-    reflection = null;
+    reflectionText = '';
     reflectionLoadedFor = null;
   }
 
@@ -128,7 +126,8 @@
   async function pdf() {
     if (card) {
       try {
-        await downloadPdf(card.pmid);
+        // Include the current reflection (transient for registered, stored for premium).
+        await downloadPdf(card.pmid, reflectionText.trim() || null);
       } catch (e) {
         error = (e as Error).message;
       }
@@ -175,7 +174,9 @@
       {/if}
       <div class="hint">
         {#if session.isPaid}
-          Premium — save this card to a deck.
+          Premium — add to a deck; your reflection is saved and in the PDF.
+        {:else if session.isSignedIn}
+          Registered — add a reflection; it’s included in your PDF.
         {:else}
           Refresh or “deal” for another card.
         {/if}
@@ -189,15 +190,10 @@
     {:else if error}
       <div class="msg err">Error: {error}</div>
     {:else if card}
-      {#if session.isPaid}
-        {#key `${card.pmid}:${reflectionReady}`}
+      {#if session.isSignedIn}
+        {#key card.pmid}
           <div in:fly={{ y: 18, duration: 320 }}>
-            <ReflectiveCard
-              {card}
-              pmid={card.pmid}
-              reflection={reflectionReady ? reflection : null}
-              onreflection={(t) => (reflection = t)}
-            />
+            <ReflectiveCard {card} pmid={card.pmid} bind:text={reflectionText} canSave={session.isPaid} />
           </div>
         {/key}
       {:else}

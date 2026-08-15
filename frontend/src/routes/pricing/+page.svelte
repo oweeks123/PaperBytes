@@ -83,8 +83,8 @@
     <ul>
       <li>Everything in Free</li>
       <li>Registered practitioner account</li>
+      <li>Add a reflection to the printed PDF</li>
       <li class="soon">Full pharma / POM advertising <em>(coming soon)</em></li>
-      <li class="soon">Add a reflection to the PDF <em>(coming soon)</em></li>
     </ul>
     {#if tier === 'free_registered'}
       <div class="badge-current">Current plan</div>
