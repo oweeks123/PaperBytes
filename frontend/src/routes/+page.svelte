@@ -155,10 +155,7 @@
 
 <div class="bar">
   <div>
-    <h1>Paper Heroes</h1>
-    <div class="sub">
-      ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.
-    </div>
+    <p class="sub">ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.</p>
   </div>
   <button class="deal" onclick={deal} disabled={dealing}>
     {dealing ? 'Dealing…' : 'Deal another card'}
@@ -321,19 +318,15 @@
     gap: 16px;
     margin-bottom: 22px;
   }
-  .bar h1 {
-    font-size: 40px;
-    letter-spacing: -1.2px;
-    line-height: 1;
-    font-weight: 800;
-    color: var(--ink);
-  }
+  /* The tagline now leads the page (the brand lives in the top nav). */
   .sub {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    color: var(--muted-2);
-    margin-top: 6px;
+    font-size: 16px;
+    line-height: 1.55;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    color: var(--ink);
+    max-width: 640px;
   }
   .deal {
     font-size: 23px;
@@ -457,8 +450,8 @@
       align-items: stretch;
       gap: 12px;
     }
-    .bar h1 {
-      font-size: 30px;
+    .sub {
+      font-size: 14px;
     }
     .deal {
       text-align: center;
