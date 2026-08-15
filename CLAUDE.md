@@ -5,21 +5,28 @@ conventions, and non-obvious gotchas that aren't visible from the code alone.
 
 ## What this is
 
-**Paper Hero** (internal name PaperBytes) — a clinical-evidence web app. The
-shipped MVP is the **free tier**: each page load deals ONE recently-published,
-randomly-chosen medical paper, AI-summarised + critically appraised, shown as a
-comic-book **trading card** with an AI-generated hero/villain illustration of the
-topic. See `README.md` for the product/deploy overview; this file is the working
-context for making changes.
+**Paper Heroes** (internal name PaperBytes) — a clinical-evidence web app. Each
+page load deals ONE recently-published, randomly-chosen medical paper,
+AI-summarised + critically appraised, shown as a comic-book **trading card** with
+an AI-generated hero/villain illustration of the topic. See `README.md` for the
+product/deploy overview; this file is the working context for making changes.
 
-Status: **free tier is done and being packaged for deployment.** Registered and
-paid tiers exist as backend endpoints only (frontend not built — see Roadmap).
+Status: **deployed to production** on Render at **https://paperheros.io** (Docker
+image, managed Postgres, Cloudflare DNS; auto-deploys from `main`). Both the
+**free tier** and the **paid "Card Decks" tier** are built and live:
+- **Free tier** — the random-card experience above, with a Google AdSense unit.
+- **Paid tier** — signed-in practitioners can save cards into named **Card Decks**,
+  scroll a deck, open a card, and write a **reflection on the back** (the card
+  flips). Upgrade is currently *simulated* (`/auth/upgrade`, no Stripe).
+- **Registered (middle) tier** — accounts exist; its distinct frontend feature
+  (a *transient* reflection added to the PDF, not stored) is not built yet.
 
 ## Architecture at a glance
 
 ```
-Browser ──/ui──▶ SvelteKit SPA (built to frontend/build, served by FastAPI)
-                     │ fetch /random, /articles/{pmid}/image, /geo, /contact, PDF
+Browser ──/ui──▶ SvelteKit SPA (multi-route: /, /decks, /decks/[id]; served by FastAPI)
+                     │ fetch /random, /articles/{pmid}/image, /geo, /contact, PDF,
+                     │       /auth/*, /decks/*, /cards/{pmid}/reflection
                      ▼
                  FastAPI (main.py)
                    ├─ paperbytes/pubmed  → NCBI E-utilities (retrieval)
@@ -29,7 +36,11 @@ Browser ──/ui──▶ SvelteKit SPA (built to frontend/build, served by Fas
 ```
 
 Everything is one FastAPI service. The frontend is same-origin at `/ui` (no CORS in
-prod; Vite proxies to `:8000` in dev).
+prod; Vite proxies to `:8000` in dev). The bare `/` **redirects browsers to `/ui/`**
+(content-negotiated) while still serving the health JSON to platform health checks;
+`/healthz` always returns that JSON. Because the SPA now has client-side routes,
+the `/ui` mount uses `SPAStaticFiles` (serves `index.html` for unknown `/ui/*`
+paths so deep links / refreshes on `/ui/decks` resolve; real `_app/*` misses 404).
 
 ### The `/random` flow (the core path)
 
@@ -48,8 +59,12 @@ change that re-analyses or re-generates an image for a PMID that already has one
 
 ## Layout
 
-- `main.py` (~47KB) — the whole API: ORM models, pydantic schemas, AI calls, image
-  gen, all routes, StaticFiles mount. Big but deliberately single-file.
+- `main.py` — the whole API: ORM models, pydantic schemas, AI calls, image gen, all
+  routes, StaticFiles mount. Big but deliberately single-file. Includes the tier
+  models/endpoints: `User` + auth (`/auth/register|me|upgrade|downgrade`), and the
+  Card Decks (`Deck`, `DeckCard`, `CardReflection` tables; `/decks*` +
+  `/cards/{pmid}/reflection`, all `require_paid`). The legacy flat `/reading-list`
+  endpoints remain but are superseded by decks in the UI.
 - `paperbytes/` — typed, side-effect-free support code. **Passes `mypy --strict`
   and is unit-tested.** Keep new pure logic here, not in `main.py`.
   - `config.py` `Settings` (pydantic-settings, case-insensitive env). `get_settings()`
@@ -58,18 +73,32 @@ change that re-analyses or re-generates an image for a PMID that already has one
     `client.py` (`PubMedClient`, httpx + tenacity, history server, POST for big
     queries), `parser.py` (lxml), `models.py`, `filters.py` (loads `article_bucket.txt`).
   - `geo.py`, `pdf.py` (reportlab).
-- `frontend/` — SvelteKit (Svelte 5 runes). `src/routes/+page.svelte` (page shell,
-  contact modal), `src/lib/components/EvidenceCard.svelte` (the card),
-  `src/lib/api.ts` (typed client + `toCard()` view-model mapping).
+- `frontend/` — SvelteKit (Svelte 5 runes).
+  - `src/routes/+layout.svelte` — global chrome: top nav + account menu, session
+    init, hosts the auth modal.
+  - `src/routes/+page.svelte` — home (the deal-a-card page, contact modal,
+    paid-only "Add to deck").
+  - `src/routes/decks/+page.svelte` — **My Decks** (decks as card piles).
+  - `src/routes/decks/[id]/+page.svelte` — deck view (scrollable card strip → open).
+  - `src/lib/components/` — `EvidenceCard.svelte` (the card), `ReflectiveCard.svelte`
+    (3D flip: front = EvidenceCard, back = reflection), `AuthModal.svelte`,
+    `AddToDeckModal.svelte`.
+  - `src/lib/session.svelte.ts` (auth/session runes store) and `ui.svelte.ts`
+    (shared "open auth modal" state).
+  - `src/lib/api.ts` — typed client, `toCard()` + `deckCardToCardModel()`,
+    auth-aware fetch (`setAuthToken`) and all auth/deck calls.
 - `tests/`, `docs/`, `article_bucket.txt`, `validate_journals.py`.
 
 ## Conventions & gotchas
 
-**Environment (Windows dev machine):**
-- Shell is **PowerShell**; a Bash tool is also available for POSIX. Docker is **not
-  installed** (Dockerfile is written but untested here).
-- Node is at `C:\Program Files\nodejs\` and **PATH doesn't refresh** — prepend it
-  in npm commands: `$env:PATH = "C:\Program Files\nodejs;$env:PATH"; npm run build`.
+**Environment:**
+- Work now happens in **Claude Code on the web** (Linux, bash). Node 20+ and Python
+  3.12 are available; `npm run build` and `pytest` run directly. The original dev
+  machine was Windows/PowerShell (Node at `C:\Program Files\nodejs\`, prepend to
+  PATH) — only relevant if you're back on that box.
+- Outbound network is restricted by an egress policy: fonts.googleapis.com,
+  onrender.com, and `git push --delete` (branch deletion) are **blocked** from the
+  session. GitHub reads/writes go through the GitHub MCP tools, not `gh`.
 
 **Backend:**
 - Run with `python main.py` (reads `.env`). No migration framework —
@@ -85,11 +114,32 @@ change that re-analyses or re-generates an image for a PMID that already has one
   re-encoded PNG→WebP (`_to_webp`, ~26KB) before storage.
 - `MOCK_ANALYSIS=1` fills appraisals from metadata (no Anthropic spend) for
   design/demo work.
+- **Tiers/auth:** lightweight, passwordless — `/auth/register` (email +
+  professional registration) returns a bearer token; `require_user`/`require_paid`
+  gate routes. `/auth/upgrade` is a *simulated* upgrade to `paid` (no Stripe).
+- **Card Decks:** `Deck` (named collection), `DeckCard` (membership), and
+  `CardReflection` — the reflection is stored **once per `(user, article)` and
+  shared across all that user's decks** (the "back of the card"), NOT per
+  deck-card. These are new tables (created on startup; no migration).
+- `main.py` routes/AI are verified by **integration testing** (FastAPI TestClient),
+  not committed unit tests — and `main.py` is outside the `ruff`/`mypy` scope
+  (those target `paperbytes/`); pre-existing `main.py` lint (e.g. unused `os`) is
+  left alone.
 
 **Frontend:**
 - Svelte 5 runes (`$state`, `$props`), scoped styles, **no Tailwind**.
-- `adapter-static` SPA: `paths.base = '/ui'`, `fallback: 'index.html'`. Build with
-  `npm run build` → `frontend/build` (gitignored — must build before serving).
+- `adapter-static` SPA: `paths.base = '/ui'`, `fallback: 'index.html'`, `ssr=false`.
+  Build with `npm run build` → `frontend/build` (gitignored — must build before
+  serving). Client routes (`/decks`, `/decks/[id]`) rely on the server's
+  `SPAStaticFiles` fallback to resolve on refresh/deep-link.
+- Session/auth lives in `session.svelte.ts` (runes singleton, token in
+  `localStorage`, `setAuthToken()` wired into `api.ts`). Paid-only UI (My Decks nav,
+  Add-to-deck, reflections) is gated on `session.isPaid`.
+- The reflection **card flip** is a CSS 3D transform (`transform-style: preserve-3d`,
+  `backface-visibility: hidden`, `rotateY(180deg)`). `preserve-3d` makes a stacking
+  context, so the flip button bar is lifted with `position: relative; z-index` to
+  stay tappable.
+- `svelte-check` must stay at **0 errors** (`npm run check`).
 - Design = the **"sticker" theme** (see `docs/card-design-mockup.html`): grape
   #7B5BE8, melon #FF5F7E, mint #5BD6A6, butter #FFC94D, sky #9BE8FF, ink #2A2340;
   cream page #FFF4E3; thick ink borders + hard offset shadows; Plus Jakarta Sans +
@@ -103,16 +153,19 @@ change that re-analyses or re-generates an image for a PMID that already has one
 ## Hard product constraints (do not regress)
 
 These were explicit user decisions — honour them:
-- Title is **"Paper Hero"**. Subline reads EXACTLY:
+- Title is **"Paper Heroes"** (was "Paper Hero" — corrected). The domain is
+  `paperheros.io` (single-r — do NOT "fix" it). Subline reads EXACTLY:
   `ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.`
 - **No forest plot. No rarity system. No CPD tariff.** (All previously requested,
   then explicitly cut.)
-- Free-tier UI has **no navigation tabs** (Home only). Reading-list/premium nav is
-  paid-tier only, and that frontend isn't built yet.
+- **Nav** appears for signed-in users; the **My Decks** tab and Add-to-deck are
+  **paid-only**. Signed-out users see just a "Sign in" chip (no tabs).
 - The card shows the reported statistics (OR/RR/CI/p) **above** the stat block with
   a plain-language significance comment, plus an AI-interpretation **caveat** at the
   bottom of the card.
 - Analyse/illustrate **once per PMID, then cache** (the cost model).
+- Deck **reflections are shared per card across all of a user's decks** (not
+  per-deck) — an explicit product decision.
 
 ## SECURITY — read before every commit
 
@@ -130,26 +183,48 @@ These were explicit user decisions — honour them:
   ```
 - `.gitignore` already excludes `.env`, `*.db`, generated `*.png`/`*.jpg`, caches.
   Don't stage `frontend/build` or `node_modules`.
+- The **AdSense publisher ID** (`ca-pub-…` in `app.html` + `/ads.txt`) is *public*
+  by design — fine to commit. It is not a secret.
 
 ## Working here
 
 - Before editing typed code in `paperbytes/`, remember it must stay
   `mypy --strict` clean and unit-tested. Run `pytest`, `mypy`, `ruff check` before
   committing.
-- After frontend changes, rebuild (`npm run build`) and confirm the app still
-  serves at `/ui/`.
-- Work happens on the `backend` branch (remote review branch:
-  `origin/claude/repo-review-triplq`). Commit/push only when asked.
+- After frontend changes: `npm run build` **and** `npm run check` (svelte-check, 0
+  errors), then confirm the app serves at `/ui/`.
+- **Branch/flow:** work lands via PRs into `main`; `main` auto-deploys to Render.
+  The active working branch is `claude/webapp-deployment-strategy-yw5342`. If its PR
+  is already merged, restart it from the latest `main` for the next change (a
+  merged PR can't take new commits). Stale `backend` / `claude/*` branches can only
+  be deleted via the GitHub UI (egress policy blocks `git push --delete`).
 - Reference docs are in `docs/` (`retrieval-layer-spec.md`,
   `product-tiers-brief.md`, `card-design-mockup.html`).
 
+## Deployment (Render)
+
+- Single Docker image (multi-stage: build SvelteKit → Python runtime), described by
+  `render.yaml` (a Render Blueprint: web service + managed Postgres, `DATABASE_URL`
+  wired automatically, secrets set in the dashboard). Health check → `/`.
+- Live at **https://paperheros.io** (Cloudflare DNS-only CNAMEs → the Render
+  service; TLS auto-issued). `autoDeploy` rebuilds on every push to `main`.
+- **`DATABASE_URL` MUST be Postgres in prod.** Accounts, decks, reflections, and the
+  appraisal/image cache all live in the DB — on the container's ephemeral SQLite
+  they'd be wiped on every redeploy (and the cache would re-bill Anthropic/OpenAI).
+- AdSense: loader in `app.html`, `/ads.txt` route, one `<ins>` unit on the home
+  card. Nothing renders until Google approves the site.
+
 ## Roadmap (where future work goes)
 
-Backend endpoints already exist for these; the SvelteKit frontend is the pending
-work. See `docs/product-tiers-brief.md`.
-- **Registered tier** — accounts (lightweight token auth, no password yet),
-  pharma/POM ads (country-gated via `/geo`, UK rules first), transient reflection
-  added to the PDF (not stored).
-- **Paid tier** — searchable stored reading list, stored/updatable reflections;
-  currently a *simulated* upgrade (no Stripe).
-- **Infra** — Alembic migrations; SMTP for contact delivery; auth hardening.
+See `docs/product-tiers-brief.md`. **Done:** free tier, paid **Card Decks** tier
+(accounts + decks + shared reflections, full frontend), Render deployment, custom
+domain, AdSense. **Remaining:**
+- **Payments** — replace the simulated `/auth/upgrade` with real **Stripe** checkout
+  + webhook.
+- **Auth hardening** — currently passwordless (email + registration → token); add
+  password or email-link verification.
+- **Registered tier** — its one unbuilt frontend feature: a *transient* reflection
+  added to the PDF (not stored), for the middle tier.
+- **Advertising** — real **pharma/POM** ad units, country-gated via `/geo` (UK rules
+  first); today it's a single generic AdSense unit.
+- **Infra** — Alembic migrations; SMTP for contact delivery.
