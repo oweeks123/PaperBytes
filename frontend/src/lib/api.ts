@@ -271,3 +271,115 @@ export function toCard(a: RandomArticle): CardModel {
     limitations: ap.limitations || ''
   };
 }
+
+// --- Auth + Card Decks (paid tier) -----------------------------------------
+export interface User {
+  email: string;
+  professional_registration: string;
+  tier: 'free_registered' | 'paid' | string;
+  token: string;
+}
+
+export interface DeckSummary {
+  id: number;
+  name: string;
+  card_count: number;
+  cover_pmids: string[];
+  updated_at: string | null;
+}
+
+export interface DeckCard {
+  pubmed_id: string;
+  title: string;
+  journal: string | null;
+  pubmed_url: string;
+  summary: string;
+  specialties: string[];
+  appraisal: Appraisal | null;
+  image_url: string;
+  has_image: boolean;
+  reflection: string | null;
+  added_at: string | null;
+}
+
+export interface Deck {
+  id: number;
+  name: string;
+  card_count: number;
+  cards: DeckCard[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+// The session store sets this so every authed call carries the bearer token.
+let _token: string | null = null;
+export function setAuthToken(t: string | null): void {
+  _token = t;
+}
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return _token ? { ...extra, Authorization: `Bearer ${_token}` } : extra;
+}
+function authedJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  return json<T>(url, { ...init, headers: authHeaders(init.headers as Record<string, string>) });
+}
+const jsonBody = (v: unknown): RequestInit => ({
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(v)
+});
+
+// auth
+export const register = (email: string, professional_registration: string) =>
+  json<User>('/auth/register', { method: 'POST', ...jsonBody({ email, professional_registration }) });
+export const getMe = () => authedJson<User>('/auth/me');
+export const upgradeTier = () => authedJson<User>('/auth/upgrade', { method: 'POST' });
+export const downgradeTier = () => authedJson<User>('/auth/downgrade', { method: 'POST' });
+
+// decks
+export const listDecks = () => authedJson<DeckSummary[]>('/decks');
+export const getDeck = (id: number) => authedJson<Deck>(`/decks/${id}`);
+export const createDeck = (name: string) =>
+  authedJson<Deck>('/decks', { method: 'POST', ...jsonBody({ name }) });
+export const renameDeck = (id: number, name: string) =>
+  authedJson<Deck>(`/decks/${id}`, { method: 'PATCH', ...jsonBody({ name }) });
+export const deleteDeck = (id: number) =>
+  authedJson<{ status: string }>(`/decks/${id}`, { method: 'DELETE' });
+export const addCardToDeck = (deckId: number, pubmed_id: string) =>
+  authedJson<DeckCard>(`/decks/${deckId}/cards`, { method: 'POST', ...jsonBody({ pubmed_id }) });
+export const removeCardFromDeck = (deckId: number, pmid: string) =>
+  authedJson<{ status: string }>(`/decks/${deckId}/cards/${encodeURIComponent(pmid)}`, {
+    method: 'DELETE'
+  });
+export const setReflection = (pmid: string, reflection: string) =>
+  authedJson<{ pubmed_id: string; reflection: string | null }>(
+    `/cards/${encodeURIComponent(pmid)}/reflection`,
+    { method: 'PUT', ...jsonBody({ reflection }) }
+  );
+
+// Map a stored DeckCard to the EvidenceCard view-model, reusing toCard().
+export function deckCardToCardModel(dc: DeckCard): CardModel {
+  const appraisal: Appraisal = dc.appraisal ?? {
+    study_design: '',
+    population: '',
+    intervention: '',
+    comparator: '',
+    outcomes: [],
+    risk_of_bias: '',
+    level_of_evidence: '',
+    limitations: ''
+  };
+  return toCard({
+    pmid: dc.pubmed_id,
+    title: dc.title,
+    journal: dc.journal,
+    authors: [],
+    publication_date: null,
+    doi: null,
+    pubmed_url: dc.pubmed_url,
+    abstract: null,
+    summary: dc.summary,
+    specialties: dc.specialties,
+    appraisal,
+    cached: true,
+    mock: false
+  });
+}
