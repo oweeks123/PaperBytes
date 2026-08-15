@@ -13,14 +13,6 @@
     session.init();
   });
 
-  async function upgrade() {
-    await session.upgrade();
-    menuOpen = false;
-  }
-  async function downgrade() {
-    await session.downgrade();
-    menuOpen = false;
-  }
   function signOut() {
     session.signOut();
     menuOpen = false;
@@ -49,10 +41,13 @@
           <div class="menu" role="menu">
             {#if session.isPaid}
               <a role="menuitem" href="{base}/decks" onclick={() => (menuOpen = false)}>My Decks</a>
-              <button role="menuitem" onclick={downgrade}>Switch to free tier</button>
-            {:else}
-              <button role="menuitem" class="up" onclick={upgrade}>✦ Upgrade to Premium</button>
             {/if}
+            <a
+              role="menuitem"
+              class="up"
+              href="{base}/pricing"
+              onclick={() => (menuOpen = false)}>✦ Plans &amp; tiers</a
+            >
             <button role="menuitem" onclick={signOut}>Sign out</button>
           </div>
         {/if}

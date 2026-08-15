@@ -1,29 +1,29 @@
 <script lang="ts">
   import EvidenceCard from './EvidenceCard.svelte';
-  import { deckCardToCardModel, setReflection, type DeckCard } from '$lib/api';
+  import { setReflection, type CardModel } from '$lib/api';
 
   let {
     card,
-    onremove,
+    pmid,
+    reflection = null,
     onreflection
   }: {
-    card: DeckCard;
-    onremove?: () => void;
+    card: CardModel;
+    pmid: string;
+    reflection?: string | null;
     onreflection?: (text: string | null) => void;
   } = $props();
 
   let flipped = $state(false);
-  let text = $state(card.reflection ?? '');
+  let text = $state(reflection ?? '');
   let busy = $state(false);
   let saved = $state(false);
-
-  const model = $derived(deckCardToCardModel(card));
 
   async function save() {
     busy = true;
     saved = false;
     try {
-      const r = await setReflection(card.pubmed_id, text);
+      const r = await setReflection(pmid, text);
       onreflection?.(r.reflection);
       saved = true;
     } finally {
@@ -35,7 +35,7 @@
 <div class="wrap">
   <div class="flip" class:flipped>
     <div class="face front" aria-hidden={flipped}>
-      <EvidenceCard card={model} />
+      <EvidenceCard {card} />
     </div>
     <div class="face back" aria-hidden={!flipped}>
       <div class="backinner">
@@ -61,15 +61,12 @@
     <button class="flipbtn" onclick={() => (flipped = !flipped)}>
       {#if flipped}
         ↩ Back to card
-      {:else if card.reflection}
+      {:else if text.trim()}
         📝 View reflection
       {:else}
         ＋ Add reflection
       {/if}
     </button>
-    {#if onremove}
-      <button class="rm" onclick={onremove}>Remove from deck</button>
-    {/if}
   </div>
 </div>
 
@@ -173,18 +170,6 @@
     color: var(--butter-ink);
     cursor: pointer;
     box-shadow: 0 4px 0 var(--butter-shadow);
-  }
-  .rm {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 12px 16px;
-    border: 2px solid var(--ink);
-    border-radius: 13px;
-    background: #fff;
-    color: var(--bad);
-    cursor: pointer;
   }
   .mbtn {
     font-family: 'JetBrains Mono', monospace;

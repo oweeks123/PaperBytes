@@ -56,8 +56,8 @@
 {:else if !session.isPaid}
   <div class="gate">
     <h2>Upgrade to Premium</h2>
-    <p>Premium lets you save cards into searchable decks and write a reflection on the back of each card.</p>
-    <button class="cta" onclick={() => session.upgrade()}>✦ Upgrade to Premium</button>
+    <p>Premium lets you save cards into decks and write a reflection on the back of each card.</p>
+    <button class="cta" onclick={() => goto(`${base}/pricing`)}>✦ See plans</button>
   </div>
 {:else}
   {#if error}<div class="msg err">Error: {error}</div>{/if}

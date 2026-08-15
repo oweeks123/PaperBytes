@@ -354,6 +354,15 @@ export const setReflection = (pmid: string, reflection: string) =>
     `/cards/${encodeURIComponent(pmid)}/reflection`,
     { method: 'PUT', ...jsonBody({ reflection }) }
   );
+export const getReflection = (pmid: string) =>
+  authedJson<{ pubmed_id: string; reflection: string | null }>(
+    `/cards/${encodeURIComponent(pmid)}/reflection`
+  );
+
+// One specific, already-analysed card (same shape as /random). Used by the home
+// page's ?pmid=… deep link when a card is opened from a deck (a fresh hit).
+export const getCard = (pmid: string) =>
+  json<RandomArticle>(`/articles/${encodeURIComponent(pmid)}/card`);
 
 // Map a stored DeckCard to the EvidenceCard view-model, reusing toCard().
 export function deckCardToCardModel(dc: DeckCard): CardModel {
