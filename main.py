@@ -772,6 +772,9 @@ def _health_payload() -> dict:
         "ncbi_api_key_configured": bool(settings.ncbi_api_key),
         "ncbi_rate_limit": settings.ncbi_rate_limit,
         "mock_analysis": settings.mock_analysis,
+        # Which DB backend is live — "postgresql" in prod, "sqlite" if it fell back
+        # to the ephemeral local file. Lets you confirm persistence at a glance.
+        "database": engine.url.get_backend_name(),
     }
 
 
