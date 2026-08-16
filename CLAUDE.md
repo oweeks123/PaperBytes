@@ -11,7 +11,7 @@ AI-summarised + critically appraised, shown as a comic-book **trading card** wit
 an AI-generated hero/villain illustration of the topic. See `README.md` for the
 product/deploy overview; this file is the working context for making changes.
 
-Status: **deployed to production** on Render at **https://paperheros.io** (Docker
+Status: **deployed to production** on Render at **https://paperheroes.io** (Docker
 image, managed Postgres, Cloudflare DNS; auto-deploys from `main`). Both the
 **free tier** and the **paid "Card Decks" tier** are built and live:
 - **Free tier** — the random-card experience above, with a Google AdSense unit.
@@ -153,8 +153,9 @@ change that re-analyses or re-generates an image for a PMID that already has one
 ## Hard product constraints (do not regress)
 
 These were explicit user decisions — honour them:
-- Title is **"Paper Heroes"** (was "Paper Hero" — corrected). The domain is
-  `paperheros.io` (single-r — do NOT "fix" it). Subline reads EXACTLY:
+- Title is **"Paper Heroes"** (was "Paper Hero" — corrected). The live domain is
+  **`paperheroes.io`** (it moved from the earlier single-r `paperheros.io`). Subline
+  reads EXACTLY:
   `ONE PAPER, DRAWN AT RANDOM FROM THE LAST 30 DAYS · APPRAISED BY AI.`
 - **No forest plot. No rarity system. No CPD tariff.** (All previously requested,
   then explicitly cut.)
@@ -206,7 +207,7 @@ These were explicit user decisions — honour them:
 - Single Docker image (multi-stage: build SvelteKit → Python runtime), described by
   `render.yaml` (a Render Blueprint: web service + managed Postgres, `DATABASE_URL`
   wired automatically, secrets set in the dashboard). Health check → `/`.
-- Live at **https://paperheros.io** (Cloudflare DNS-only CNAMEs → the Render
+- Live at **https://paperheroes.io** (Cloudflare DNS-only CNAMEs → the Render
   service; TLS auto-issued). `autoDeploy` rebuilds on every push to `main`.
 - **`DATABASE_URL` MUST be Postgres in prod.** Accounts, decks, reflections, and the
   appraisal/image cache all live in the DB — on the container's ephemeral SQLite
