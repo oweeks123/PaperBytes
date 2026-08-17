@@ -5,6 +5,7 @@
   import { base } from '$app/paths';
   import EvidenceCard from '$lib/components/EvidenceCard.svelte';
   import ReflectiveCard from '$lib/components/ReflectiveCard.svelte';
+  import CardSkeleton from '$lib/components/CardSkeleton.svelte';
   import AddToDeckModal from '$lib/components/AddToDeckModal.svelte';
   import { session } from '$lib/session.svelte';
   import {
@@ -184,9 +185,16 @@
 
   <div class="cardwrap">
     {#if loading}
-      <div class="msg">Dealing your card… new papers are appraised on the fly (a few seconds).</div>
+      <CardSkeleton />
     {:else if error}
-      <div class="msg err">Error: {error}</div>
+      <div class="errcard" role="alert">
+        <div class="erricon">⚠</div>
+        <h3>Couldn’t deal a card</h3>
+        <p class="errmsg">{error}</p>
+        <button class="retry" onclick={deal} disabled={dealing}>
+          {dealing ? 'Trying…' : 'Try again'}
+        </button>
+      </div>
     {:else if card}
       {#if session.isSignedIn}
         {#key card.pmid}
@@ -407,16 +415,55 @@
   .cardwrap {
     min-height: 220px;
   }
-  .msg {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-    padding: 40px 0;
+  .errcard {
+    border: 3px solid var(--ink);
+    border-radius: 22px;
+    box-shadow: 0 8px 0 var(--ink);
+    background: var(--face);
+    padding: 40px 28px;
     text-align: center;
   }
-  .msg.err {
+  .erricon {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--ink);
     color: var(--bad);
+  }
+  .errcard h3 {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+  .errmsg {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 18px;
+    word-break: break-word;
+  }
+  .retry {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 12px 20px;
+    border: 2px solid var(--ink);
+    border-radius: 13px;
+    background: var(--grape);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 0 var(--grape-shadow);
+  }
+  .retry:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .rail {
