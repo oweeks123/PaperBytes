@@ -14,12 +14,10 @@
     getReflection,
     toCard,
     downloadPdf,
-    sendContact,
     type CardModel
   } from '$lib/api';
 
   let addOpen = $state(false);
-  let aboutOpen = $state(false);
 
   let card = $state<CardModel | null>(null);
   let loading = $state(true);
@@ -49,47 +47,6 @@
       cancelled = true;
     };
   });
-
-  // Contact modal
-  let contactOpen = $state(false);
-  let contactMessage = $state('');
-  let contactEmail = $state('');
-  let contactHp = $state(''); // honeypot
-  let contactSending = $state(false);
-  let contactSent = $state(false);
-  let contactError = $state<string | null>(null);
-
-  function openContact() {
-    contactOpen = true;
-    contactSent = false;
-    contactError = null;
-  }
-  function closeContact() {
-    contactOpen = false;
-    contactMessage = '';
-    contactEmail = '';
-    contactError = null;
-  }
-  async function submitContact() {
-    contactError = null;
-    if (contactMessage.trim().length < 3) {
-      contactError = 'Please enter a message.';
-      return;
-    }
-    contactSending = true;
-    try {
-      await sendContact({
-        message: contactMessage.trim(),
-        from_email: contactEmail.trim() || undefined,
-        website: contactHp
-      });
-      contactSent = true;
-    } catch (e) {
-      contactError = (e as Error).message;
-    } finally {
-      contactSending = false;
-    }
-  }
 
   function resetReflection() {
     reflectionText = '';
@@ -137,7 +94,6 @@
   }
 
   onMount(() => {
-    if (location.hash === '#contact') openContact();
     const pmid = new URL(location.href).searchParams.get('pmid');
     if (pmid) openPmid(pmid);
     else deal();
@@ -226,89 +182,6 @@
     </div>
   </div>
 </div>
-
-<footer class="foot">
-  <button class="contact-link" onclick={() => (aboutOpen = true)}>About</button>
-  <span class="foot-sep">·</span>
-  <button class="contact-link" onclick={openContact}>Contact us</button>
-</footer>
-
-{#if contactOpen}
-  <div
-    class="overlay"
-    role="presentation"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) closeContact();
-    }}
-  >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Contact the developer">
-      {#if contactSent}
-        <h3>Message sent 🎉</h3>
-        <p class="note">Thanks for getting in touch — we’ll get back to you if you left an email.</p>
-        <div class="dialog-actions">
-          <button class="mbtn" onclick={closeContact}>Close</button>
-        </div>
-      {:else}
-        <h3>Contact us</h3>
-        <p class="note">Feedback, a bug, or just saying hello? Send the developer a message.</p>
-        <label>
-          Your email <span class="opt">(optional, so we can reply)</span>
-          <input type="email" bind:value={contactEmail} placeholder="you@example.com" />
-        </label>
-        <label>
-          Message
-          <textarea bind:value={contactMessage} rows="5" placeholder="What’s on your mind?"></textarea>
-        </label>
-        <input
-          class="hp"
-          tabindex="-1"
-          autocomplete="off"
-          aria-hidden="true"
-          bind:value={contactHp}
-          placeholder="Leave this empty"
-        />
-        {#if contactError}<div class="derr">{contactError}</div>{/if}
-        <div class="dialog-actions">
-          <button class="mbtn" onclick={submitContact} disabled={contactSending}>
-            {contactSending ? 'Sending…' : 'Send'}
-          </button>
-          <button class="mbtn ghost" onclick={closeContact}>Cancel</button>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
-
-{#if aboutOpen}
-  <div
-    class="overlay"
-    role="presentation"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) aboutOpen = false;
-    }}
-  >
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="About Paper Heroes">
-      <h3>About Paper Heroes</h3>
-      <p class="note">
-        Paper Heroes deals you <strong>one recently-published medical paper at random</strong>,
-        drawn from a curated set of journals over the last 30 days. Each paper is summarised and
-        critically appraised by AI and shown as a comic-book <strong>trading card</strong> — with an
-        AI-generated hero (for beneficial findings) or villain (for harms) illustrating the topic.
-      </p>
-      <p class="note">
-        Registered practitioners can add a reflection to the downloadable PDF. Premium members can
-        save cards into <strong>Card Decks</strong> and keep a reflection on the back of each card.
-      </p>
-      <p class="note caveat-note">
-        ⚠ AI-generated summaries, appraisals and illustrations can be wrong — always verify against
-        the original article before making any clinical decision.
-      </p>
-      <div class="dialog-actions">
-        <button class="mbtn" onclick={() => (aboutOpen = false)}>Close</button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 {#if card}
   <AddToDeckModal open={addOpen} pmid={card.pmid} onclose={() => (addOpen = false)} />
@@ -530,135 +403,5 @@
     .ad ins.adsbygoogle {
       min-height: 250px;
     }
-  }
-
-  /* footer contact link */
-  .foot {
-    text-align: center;
-    padding: 26px 0 6px;
-    margin-top: 8px;
-  }
-  .contact-link {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted-2);
-    padding: 6px 8px;
-  }
-  .contact-link:hover {
-    color: var(--ink);
-    text-decoration: underline;
-  }
-  .foot-sep {
-    color: var(--muted-2);
-    font-size: 11px;
-  }
-  .caveat-note {
-    color: var(--warn);
-  }
-
-  /* contact + about modal */
-  .overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    background: rgba(42, 35, 64, 0.55);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .dialog {
-    background: #fff;
-    border: 3px solid var(--ink);
-    border-radius: 22px;
-    box-shadow: 0 14px 0 rgba(42, 35, 64, 0.18);
-    padding: 24px;
-    width: min(460px, 94vw);
-  }
-  .dialog h3 {
-    font-size: 22px;
-    font-weight: 800;
-    margin-bottom: 6px;
-  }
-  .dialog .note {
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 16px;
-  }
-  .dialog label {
-    display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 14px;
-  }
-  .dialog label .opt {
-    text-transform: none;
-    letter-spacing: 0;
-  }
-  .dialog input,
-  .dialog textarea {
-    display: block;
-    width: 100%;
-    margin-top: 6px;
-    background: var(--face);
-    color: var(--ink);
-    border: 2px solid var(--ink);
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-  }
-  .dialog textarea {
-    resize: vertical;
-  }
-  .dialog .hp {
-    position: absolute;
-    left: -9999px;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-  }
-  .derr {
-    color: var(--bad);
-    font-size: 12.5px;
-    margin-bottom: 8px;
-  }
-  .dialog-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 4px;
-  }
-  .mbtn {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 800;
-    font-size: 14px;
-    background: var(--grape);
-    color: #fff;
-    border: 2px solid var(--ink);
-    border-radius: 12px;
-    padding: 11px 20px;
-    cursor: pointer;
-    box-shadow: 0 4px 0 var(--ink);
-  }
-  .mbtn:active {
-    transform: translateY(2px);
-    box-shadow: 0 2px 0 var(--ink);
-  }
-  .mbtn:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-  .mbtn.ghost {
-    background: #fff;
-    color: var(--ink);
-    box-shadow: none;
   }
 </style>

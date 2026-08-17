@@ -4,6 +4,7 @@
   import { session } from '$lib/session.svelte';
   import { ui } from '$lib/ui.svelte';
   import AuthModal from '$lib/components/AuthModal.svelte';
+  import ContactModal from '$lib/components/ContactModal.svelte';
   import '../app.css';
 
   let { children } = $props();
@@ -11,6 +12,8 @@
 
   onMount(() => {
     session.init();
+    // Allow /#contact (from footer links on content pages) to open the modal.
+    if (location.hash === '#contact') ui.openContact();
   });
 
   function signOut() {
@@ -61,7 +64,21 @@
   {@render children()}
 </main>
 
+<footer class="sitefoot">
+  <nav class="footlinks">
+    <a href="{base}/about">About</a>
+    <span class="sep">·</span>
+    <a href="{base}/privacy">Privacy</a>
+    <span class="sep">·</span>
+    <a href="{base}/terms">Terms</a>
+    <span class="sep">·</span>
+    <button class="footbtn" onclick={() => ui.openContact()}>Contact us</button>
+  </nav>
+  <p class="copy">© 2026 Paper Heroes · One paper, drawn at random · Appraised by AI.</p>
+</footer>
+
 <AuthModal open={ui.authOpen} onclose={() => ui.closeAuth()} />
+<ContactModal />
 
 <style>
   .topbar {
@@ -190,5 +207,48 @@
   .menu .up {
     color: var(--grape);
     font-weight: 700;
+  }
+
+  .sitefoot {
+    margin-top: 40px;
+    padding: 26px 0 6px;
+    border-top: 2px solid var(--line);
+    text-align: center;
+  }
+  .footlinks {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .footlinks a,
+  .footbtn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-2);
+    text-decoration: none;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .footlinks a:hover,
+  .footbtn:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  .sep {
+    color: var(--muted-2);
+    font-size: 11px;
+  }
+  .copy {
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--muted-2);
   }
 </style>
